@@ -2,7 +2,21 @@ services:
   backend:
     build:
       context: ..
-      dockerfile: ./services/backend
+      dockerfile: services/backend/Dockerfile
+    env_file:
+      - ../.env
+    environment: 
+      DB_HOST: database
+      DB_PORT: 5432
+    volumes:
+      - ../services/backend/logs:/app/logs
+    depends_on:
+       database:
+         condition: service_healthy
+       redis: 
+        condition: service_started
+
+
   database:
     image: postgres:18-alpine
     restart: always
@@ -10,8 +24,13 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     ports:
-      - 5432:5432
+      - 5433:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
     

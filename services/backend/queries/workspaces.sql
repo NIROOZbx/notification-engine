@@ -1,0 +1,36 @@
+-- name: FindWorkspaceByID :one
+
+SELECT * from workspaces where id = $1 LIMIT 1;
+
+-- name: GetWorkspaceBySlug :one
+SELECT * FROM workspaces
+WHERE slug = $1
+LIMIT 1;
+
+-- name: DeleteWorkspace :exec
+DELETE FROM workspaces
+WHERE id = $1;
+
+-- name: CreateWorkspace :one
+
+INSERT INTO workspaces (id, name, slug,plan_id) VALUES
+(
+    gen_random_uuid(),
+    $1,
+    $2,
+    (SELECT id FROM plans WHERE name = 'free' LIMIT 1)
+) RETURNING * ;
+
+-- name: UpdateWorkspaceName :one
+UPDATE workspaces
+SET name       = $2,
+    slug       = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateWorkspacePlan :one
+
+UPDATE workspaces
+SET plan_id    = $2
+WHERE id = $1
+RETURNING *;

@@ -1,0 +1,61 @@
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  MIGRATION_PATH: "migrations"
+  DB_URL: "postgres://{{.DB_USER}}:{{.DB_PASSWORD}}@localhost:{{.DB_PORT}}/{{.DB_NAME}}?sslmode=disable"
+  COMPOSE_FILE: deployments/docker-compose.yml
+
+tasks:
+  #Commands used to run docker
+  up:
+    desc: Starting docker compose (postgres,redis,backend)
+    cmds:
+      - echo "Starting docker compose"
+      - docker compose -f {{.COMPOSE_FILE}} up --build -d
+  down:
+    desc: Stop all containers
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} down
+
+  down-v:
+    desc: Stop containers and delete all volumes — fresh start
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} down -v
+  remove:
+    desc: Remove stopped containers
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} rm
+
+  #Commands used to migrate to the database
+  migrate-create:
+    desc: Create a new migration file pair
+    cmds:
+      - echo "Creating migration files..."
+      - migrate create -ext sql -dir {{.MIGRATION_PATH}} -seq {{.CLI_ARGS}}
+
+  migrate-down:
+    cmds:
+      - echo "Dropping database schema..."
+      - migrate -path {{.MIGRATION_PATH}} -database "{{.DB_URL}}" down {{.CLI_ARGS}}
+
+  migrate-up:
+    cmds:
+      - echo "Applying database migrations..."
+      - migrate -path {{.MIGRATION_PATH}} -database "{{.DB_URL}}" up
+      - echo "✅ Database is up to date!"
+
+  migrate-force:
+    cmds:
+      - echo "Forcing database migration..."
+      - migrate -path {{.MIGRATION_PATH}} -database "{{.DB_URL}}" force {{.CLI_ARGS}}
+
+  start:
+    desc: Full boot sequence (Infra -> Migrate -> Logs)
+    cmds:
+      - task: up
+      - echo "⏳ Waiting for database to initialize..."
+      - task: migrate-up
+      - echo "🚀 System live. Tailing backend logs..."
+      - docker compose -f {{.COMPOSE_FILE}} logs -f backend
