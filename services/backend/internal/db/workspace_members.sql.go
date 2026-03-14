@@ -80,7 +80,7 @@ select id, workspace_id, user_id, role, invited_by, joined_at, created_at from w
 
 func (q *Queries) GetWorkspaceMemberByID(ctx context.Context, id pgtype.UUID) (WorkspaceMember, error) {
 	row := q.db.QueryRow(ctx, getWorkspaceMemberByID, id)
-	var i WorkspaceMember
+	var i WorkspaceMember	
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,

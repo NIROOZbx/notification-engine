@@ -54,3 +54,23 @@ func (w *workspaceService) RemoveMember(ctx context.Context, workspaceID, userID
 	}
 	return nil
 }
+
+func (w *workspaceService) GetWorkspaceMemberByUserID(ctx context.Context, userID pgtype.UUID) (*db.WorkspaceMember, error) {
+	workspaceMember, err := w.repo.GetWorkspaceMemberByUserID(ctx, userID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workspaceMember, nil
+}
+
+func (w *workspaceService) GetWorkspaceMemberByID(ctx context.Context, id pgtype.UUID) (*db.WorkspaceMember, error) {
+	workspaceMember, err := w.repo.GetWorkspaceMemberByUserID(ctx, id)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workspaceMember, nil
+}

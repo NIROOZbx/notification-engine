@@ -28,6 +28,8 @@ type WorkspaceService interface {
 	GetMemberRole(ctx context.Context, workspaceID pgtype.UUID, userID pgtype.UUID) (string, error)
 	UpdateMemberRole(ctx context.Context, workspaceID pgtype.UUID, userID pgtype.UUID, role string) (*db.WorkspaceMember, error)
 	RemoveMember(ctx context.Context, workspaceID pgtype.UUID, userID pgtype.UUID) error
+	GetWorkspaceMemberByUserID(ctx context.Context,userID pgtype.UUID)(*db.WorkspaceMember,error)
+	GetWorkspaceMemberByID(ctx context.Context, id pgtype.UUID) (*db.WorkspaceMember, error)
 }
 
 type workspaceService struct {
@@ -147,6 +149,9 @@ func (w *workspaceService) Delete(ctx context.Context, id pgtype.UUID) error {
 	}
 	return nil
 }
+
+
+
 
 func NewService(repo *db.Queries, pool *pgxpool.Pool) WorkspaceService {
 	return &workspaceService{

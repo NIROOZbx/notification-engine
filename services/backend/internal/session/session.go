@@ -78,10 +78,10 @@ func (r *redisStore) GetTokenVersion(ctx context.Context, userID string) (int64,
 	version, err := r.client.Get(ctx, key).Int64()
 
 	if err == redis.Nil {
-		return 1, nil
+		return 0, nil
 	}
 	if err != nil {
-		return 0, fmt.Errorf("key name %s does not exist", key)
+		return 0, fmt.Errorf("getting token version: %w", err)
 	}
 
 	return version, nil

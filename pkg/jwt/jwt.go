@@ -3,6 +3,8 @@ package jwt
 import (
 	"fmt"
 	"time"
+
+	"github.com/gofiber/fiber/v3"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -12,6 +14,8 @@ type TokenPayload struct {
 	UserID      string
 	WorkspaceID string
 	Version     int64
+	IsOnboarded bool
+	
 }
 
 type Pair struct {
@@ -25,6 +29,7 @@ type AccessClaims struct {
 	WorkspaceID string `json:"wid"`
 	Role        string `json:"role"`
 	Version     int64  `json:"ver"`
+	IsOnboarded bool   `json:"onboarded"`
 	jwt.RegisteredClaims
 }
 
@@ -50,6 +55,7 @@ func GenerateTokenPair(cfg Config, payload TokenPayload) (*Pair, error) {
 		WorkspaceID: payload.WorkspaceID,
 		Role:        payload.Role,
 		Version:     payload.Version,
+		IsOnboarded: payload.IsOnboarded,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -90,7 +96,7 @@ func GenerateTokenPair(cfg Config, payload TokenPayload) (*Pair, error) {
 
 }
 
-func ParseAcessToken(tokenStr string, secretKey []byte) (*AccessClaims, error) {
+func ParseAccessToken(tokenStr string, secretKey []byte) (*AccessClaims, error) {
 	claims := &AccessClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
@@ -105,7 +111,7 @@ func ParseAcessToken(tokenStr string, secretKey []byte) (*AccessClaims, error) {
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("Invalid token")
+		return nil, fmt.Errorf("invalid token")
 	}
 
 	return claims, nil
@@ -127,8 +133,35 @@ func ParseRefreshToken(tokenStr string, secretKey []byte) (*RefreshClaims, error
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("Invalid token")
+		return nil, fmt.Errorf("invalid token")
 	}
 
 	return claims, nil
 }
+
+func SetTokenCookies(c fiber.Ctx, pair *Pair,accessExpiryMinutes int, refreshExpiryHours int,isProd bool) {
+    c.Cookie(&fiber.Cookie{
+        Name:     "access_token",
+        Value:    pair.AccessToken,
+        HTTPOnly: true,
+        Secure:   isProd,
+        SameSite: "Lax",
+        MaxAge:   accessExpiryMinutes * 60,
+        Path:     "/",
+    })
+    c.Cookie(&fiber.Cookie{
+        Name:     "refresh_token",
+        Value:    pair.RefreshToken,
+        HTTPOnly: true,
+        Secure:   isProd,
+        SameSite: "Lax",
+        MaxAge:   refreshExpiryHours * 3600,
+        Path:     "/",
+    })
+}
+
+func ClearTokenCookies(c fiber.Ctx) {
+    c.Cookie(&fiber.Cookie{Name: "access_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
+    c.Cookie(&fiber.Cookie{Name: "refresh_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
+}
+

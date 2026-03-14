@@ -16,7 +16,7 @@ type WorkSpaceDetails struct{
 	Role string
 }
 
-type UserDTO struct{
-	UserDetails UserDetails
-	WorkSpaceDetails WorkSpaceDetails
+type AuthResponse struct{
+	User       UserDetails `json:"user"`
+	Workspace  *WorkSpaceDetails `json:"workspace,omitempty"`
 }

@@ -28,3 +28,4 @@ redis:
 auth:
   access_expiry_minutes: 15
   refresh_expiry_hours: 168 
+  environment: development

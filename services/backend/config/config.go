@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/NIROOZbx/notification-engine/services/pkg/jwt"
 	"github.com/joho/godotenv"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/providers/google"
@@ -52,10 +53,11 @@ type OAuthConfig struct {
 }
 
 type AuthConfig struct {
-	AccessExpiryMinutes     int    `mapstructure:"access_expiry_minutes"`
-	RefreshExpiryHours int    `mapstructure:"refresh_expiry_hours"`
-	AccessTokenSecret  string `mapstructure:"access_token_secret"`
-	RefreshTokenSecret string `mapstructure:"refresh_token_secret"`
+	AccessExpiryMinutes int    `mapstructure:"access_expiry_minutes"`
+	RefreshExpiryHours  int    `mapstructure:"refresh_expiry_hours"`
+	AccessTokenSecret   string `mapstructure:"access_token_secret"`
+	RefreshTokenSecret  string `mapstructure:"refresh_token_secret"`
+	Environment         string `mapstructure:"environment"`
 }
 
 type Config struct {
@@ -95,8 +97,8 @@ func LoadConfig() (*Config, error) {
 	v.BindEnv("auth.access_token_secret", "ACCESS_SECRET")
 
 	v.BindEnv("oauth.client_id", "CLIENT_ID")
-    v.BindEnv("oauth.client_secret", "CLIENT_SECRET")
-    v.BindEnv("oauth.redirect_url", "REDIRECT_URL")
+	v.BindEnv("oauth.client_secret", "CLIENT_SECRET")
+	v.BindEnv("oauth.redirect_url", "REDIRECT_URL")
 	var cfg Config
 
 	if err := v.Unmarshal(&cfg); err != nil {
@@ -118,34 +120,43 @@ func LoadConfig() (*Config, error) {
 }
 
 func validate(cfg *Config) {
-    rules := []struct {
-        value   string
-        envVar  string
-    }{
-        {cfg.Database.User,             "DB_USER"},
-        {cfg.Database.Password,         "DB_PASSWORD"},
-        {cfg.Database.Host,             "DB_HOST"},
-        {cfg.Database.Name,             "DB_NAME"},
-        {cfg.Redis.Addr,                "REDIS_ADDR"},
-        {cfg.Auth.AccessTokenSecret,    "ACCESS_SECRET"},
-        {cfg.Auth.RefreshTokenSecret,   "REFRESH_SECRET"},
-        {cfg.OAuth.ClientID,            "CLIENT_ID"},
-        {cfg.OAuth.ClientSecret,        "CLIENT_SECRET"},
-        {cfg.OAuth.RedirectURL,         "REDIRECT_URL"},
-    }
+	rules := []struct {
+		value  string
+		envVar string
+	}{
+		{cfg.Database.User, "DB_USER"},
+		{cfg.Database.Password, "DB_PASSWORD"},
+		{cfg.Database.Host, "DB_HOST"},
+		{cfg.Database.Name, "DB_NAME"},
+		{cfg.Redis.Addr, "REDIS_ADDR"},
+		{cfg.Auth.AccessTokenSecret, "ACCESS_SECRET"},
+		{cfg.Auth.RefreshTokenSecret, "REFRESH_SECRET"},
+		{cfg.OAuth.ClientID, "CLIENT_ID"},
+		{cfg.OAuth.ClientSecret, "CLIENT_SECRET"},
+		{cfg.OAuth.RedirectURL, "REDIRECT_URL"},
+	}
 
-    for _, rule := range rules {
-        if rule.value == "" {
-            log.Fatalf("%s is required", rule.envVar)
-        }
-    }
+	for _, rule := range rules {
+		if rule.value == "" {
+			log.Fatalf("%s is required", rule.envVar)
+		}
+	}
 }
 
 func InitOAuth(cfg *OAuthConfig) {
 	goth.UseProviders(google.New(
-	 cfg.ClientID,cfg.ClientSecret,cfg.RedirectURL,"email","profile",
+		cfg.ClientID, cfg.ClientSecret, cfg.RedirectURL, "email", "profile",
 	))
 
 	log.Println("OAuth providers initialized successfully")
 
+}
+
+func (a *AuthConfig) ToJWTConfig() jwt.Config {
+	return jwt.Config{
+		AccessTokenSecret:   a.AccessTokenSecret,
+		RefreshTokenSecret:  a.RefreshTokenSecret,
+		AccessExpiryMinutes: a.AccessExpiryMinutes,
+		RefreshExpiryHours:  a.RefreshExpiryHours,
+	}
 }

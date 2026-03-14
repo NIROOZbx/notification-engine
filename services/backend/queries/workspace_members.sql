@@ -17,9 +17,9 @@ WHERE workspace_id = $1;
 
 -- name: UpdateMemberRole :one
 UPDATE workspace_members
-SET role = $2
+SET role = $3
 WHERE workspace_id = $1
-AND user_id = $3
+AND user_id = $2
 RETURNING *;
 
 -- name: DeleteWorkspaceMember :exec
