@@ -9,7 +9,7 @@ import (
 )
 
 type Store interface {
-    StoreRefreshToken(ctx context.Context, tokenID, userID string, expiry time.Duration) error
+	StoreRefreshToken(ctx context.Context, tokenID, userID string, expiry time.Duration) error
 	BlackListRefreshToken(ctx context.Context, tokenID string, ttl time.Time) error
 	UpgradeTokenVersion(ctx context.Context, userID string) error
 	DeleteRefreshToken(ctx context.Context, tokenID string) error
@@ -21,27 +21,26 @@ type redisStore struct {
 	client *redis.Client
 }
 
-func(r *redisStore)StoreRefreshToken(ctx context.Context, tokenID, userID string, expiry time.Duration) error{
-	
-	key:=fmt.Sprintf("refresh:%s", tokenID)
-	
-	err:=r.client.Set(ctx,key,userID,expiry).Err()
+func (r *redisStore) StoreRefreshToken(ctx context.Context, tokenID, userID string, expiry time.Duration) error {
 
-	 if err != nil {
-        return fmt.Errorf("storing refresh token: %w", err)
-    }
-    return nil
+	key := fmt.Sprintf("refresh:%s", tokenID)
+
+	err := r.client.Set(ctx, key, userID, expiry).Err()
+
+	if err != nil {
+		return fmt.Errorf("storing refresh token: %w", err)
+	}
+	return nil
 
 }
 
 func (r *redisStore) DeleteRefreshToken(ctx context.Context, tokenID string) error {
-	key:=fmt.Sprintf("refresh:%s", tokenID)
-    if err := r.client.Del(ctx,key ).Err(); err != nil {
-        return fmt.Errorf("deleting refresh token: %w", err)
-    }
-    return nil
+	key := fmt.Sprintf("refresh:%s", tokenID)
+	if err := r.client.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("deleting refresh token: %w", err)
+	}
+	return nil
 }
-
 
 func (r *redisStore) BlackListRefreshToken(ctx context.Context, tokenID string, ttl time.Time) error {
 	key := fmt.Sprintf("blacklist:%s", tokenID)

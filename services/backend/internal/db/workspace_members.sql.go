@@ -80,7 +80,7 @@ select id, workspace_id, user_id, role, invited_by, joined_at, created_at from w
 
 func (q *Queries) GetWorkspaceMemberByID(ctx context.Context, id pgtype.UUID) (WorkspaceMember, error) {
 	row := q.db.QueryRow(ctx, getWorkspaceMemberByID, id)
-	var i WorkspaceMember	
+	var i WorkspaceMember
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
@@ -148,20 +148,20 @@ func (q *Queries) GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UU
 
 const updateMemberRole = `-- name: UpdateMemberRole :one
 UPDATE workspace_members
-SET role = $2
+SET role = $3
 WHERE workspace_id = $1
-AND user_id = $3
+AND user_id = $2
 RETURNING id, workspace_id, user_id, role, invited_by, joined_at, created_at
 `
 
 type UpdateMemberRoleParams struct {
 	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
-	Role        string      `db:"role" json:"role"`
 	UserID      pgtype.UUID `db:"user_id" json:"user_id"`
+	Role        string      `db:"role" json:"role"`
 }
 
 func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) (WorkspaceMember, error) {
-	row := q.db.QueryRow(ctx, updateMemberRole, arg.WorkspaceID, arg.Role, arg.UserID)
+	row := q.db.QueryRow(ctx, updateMemberRole, arg.WorkspaceID, arg.UserID, arg.Role)
 	var i WorkspaceMember
 	err := row.Scan(
 		&i.ID,

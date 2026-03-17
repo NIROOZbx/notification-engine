@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,7 +16,6 @@ type TokenPayload struct {
 	WorkspaceID string
 	Version     int64
 	IsOnboarded bool
-	
 }
 
 type Pair struct {
@@ -40,10 +40,10 @@ type RefreshClaims struct {
 }
 
 type Config struct {
-    AccessTokenSecret  string
-    RefreshTokenSecret string
-    AccessExpiryMinutes int
-    RefreshExpiryHours  int
+	AccessTokenSecret   string
+	RefreshTokenSecret  string
+	AccessExpiryMinutes int
+	RefreshExpiryHours  int
 }
 
 func GenerateTokenPair(cfg Config, payload TokenPayload) (*Pair, error) {
@@ -100,14 +100,17 @@ func ParseAccessToken(tokenStr string, secretKey []byte) (*AccessClaims, error) 
 	claims := &AccessClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
-		 if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-            return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-        }
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
 		return secretKey, nil
 	})
 
 	if err != nil {
-		return nil, err
+		 if errors.Is(err, jwt.ErrTokenExpired) {
+            return claims, err
+        }
+		return nil,err
 	}
 
 	if !token.Valid {
@@ -122,9 +125,9 @@ func ParseRefreshToken(tokenStr string, secretKey []byte) (*RefreshClaims, error
 	claims := &RefreshClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
-		 if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-            return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-        }
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
 		return secretKey, nil
 	})
 
@@ -139,29 +142,28 @@ func ParseRefreshToken(tokenStr string, secretKey []byte) (*RefreshClaims, error
 	return claims, nil
 }
 
-func SetTokenCookies(c fiber.Ctx, pair *Pair,accessExpiryMinutes int, refreshExpiryHours int,isProd bool) {
-    c.Cookie(&fiber.Cookie{
-        Name:     "access_token",
-        Value:    pair.AccessToken,
-        HTTPOnly: true,
-        Secure:   isProd,
-        SameSite: "Lax",
-        MaxAge:   accessExpiryMinutes * 60,
-        Path:     "/",
-    })
-    c.Cookie(&fiber.Cookie{
-        Name:     "refresh_token",
-        Value:    pair.RefreshToken,
-        HTTPOnly: true,
-        Secure:   isProd,
-        SameSite: "Lax",
-        MaxAge:   refreshExpiryHours * 3600,
-        Path:     "/",
-    })
+func SetTokenCookies(c fiber.Ctx, pair *Pair, accessExpiryMinutes int, refreshExpiryHours int, isProd bool) {
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    pair.AccessToken,
+		HTTPOnly: true,
+		Secure:   isProd,
+		SameSite: "Lax",
+		MaxAge:   accessExpiryMinutes * 60,
+		Path:     "/",
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    pair.RefreshToken,
+		HTTPOnly: true,
+		Secure:   isProd,
+		SameSite: "Lax",
+		MaxAge:   refreshExpiryHours * 3600,
+		Path:     "/",
+	})
 }
 
 func ClearTokenCookies(c fiber.Ctx) {
-    c.Cookie(&fiber.Cookie{Name: "access_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
-    c.Cookie(&fiber.Cookie{Name: "refresh_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
+	c.Cookie(&fiber.Cookie{Name: "access_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
+	c.Cookie(&fiber.Cookie{Name: "refresh_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
 }
-

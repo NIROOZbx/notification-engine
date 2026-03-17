@@ -12,11 +12,11 @@ log:
   max_age_days: 7
 
 database:
-  max_open_conns: 25
-  min_open_conns: 5
-  max_idle_conns: 10
+  max_open_conns: 50
+  min_open_conns: 25
+  max_idle_conns: 25
   max_conn_lifetime: "30m"
-  max_idle_time: "1m"
+  max_idle_time: "5m"
 
 rate_limit:
   requests_per_minute: 100

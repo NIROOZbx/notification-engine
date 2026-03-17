@@ -5,10 +5,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func RequireRole(allowedRoles ...string) fiber.Handler {
+func (a *authMiddleware)RequireRole(allowedRoles ...string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		userRole, ok := c.Locals("role").(string)
 		if !ok {
+			a.log.Warn().Msg("role middleware: role not found in context")
 			return response.Forbidden(c, nil, "role not found")
 		}
 		for _, role := range allowedRoles {
@@ -17,6 +18,10 @@ func RequireRole(allowedRoles ...string) fiber.Handler {
 			}
 		}
 
+		a.log.Warn().
+			Str("userRole", userRole).
+			Interface("allowedRoles", allowedRoles).
+			Msg("role middleware: insufficient permissions")
 		return response.Forbidden(c, nil, "insufficient permissions")
 	}
 }

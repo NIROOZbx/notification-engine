@@ -1,0 +1,1 @@
+ALTER TABLE plans DROP CONSTRAINT plans_name_unique;

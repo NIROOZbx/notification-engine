@@ -23,11 +23,13 @@ INSERT INTO users (
     auth_provider,
     provider_id,
     avatar_url,
-    is_verified
+    is_verified,
+    last_login_at
 ) VALUES (
     gen_random_uuid(),
     $1, $2, $3, $4, $5,
-    true
+    true,
+    NOW()
 )
 ON CONFLICT (email) 
 DO UPDATE SET 
@@ -35,12 +37,38 @@ DO UPDATE SET
     avatar_url    = EXCLUDED.avatar_url,
     auth_provider      = EXCLUDED.auth_provider,
     provider_id   = EXCLUDED.provider_id,
-    last_login_at = NOW(),
-    updated_at    = NOW()
+    last_login_at = NOW() 
 RETURNING *;
 
--- name: UpdateLastLogin :exec
-UPDATE users
-SET last_login_at = NOW(),
-    updated_at    = NOW()
-WHERE id = $1;
+
+-- name: CreateUser :one
+
+INSERT INTO users (id,email, full_name, password_hash, auth_provider)
+VALUES (gen_random_uuid(),$1, $2, $3, 'local')
+RETURNING *;
+
+-- name: GetUserAuthContext :one
+SELECT 
+    u.id, 
+    COALESCE(m.role, 'member') as role,
+    COALESCE(m.workspace_id, '00000000-0000-0000-0000-000000000000')::uuid as workspace_id
+FROM users u
+LEFT JOIN workspace_members m ON u.id = m.user_id
+WHERE u.id = $1 
+LIMIT 1;
+
+-- name: GetUserWithWorkspace :one
+SELECT 
+    u.id AS user_id, 
+    u.full_name, 
+    u.email, 
+    u.avatar_url,
+    COALESCE(m.role, 'member')::varchar AS role,
+    COALESCE(w.id, '00000000-0000-0000-0000-000000000000')::uuid AS workspace_id,
+    COALESCE(w.name, '')::varchar AS workspace_name,
+    COALESCE(w.slug, '')::varchar AS slug
+FROM users u
+LEFT JOIN workspace_members m ON u.id = m.user_id
+LEFT JOIN workspaces w ON m.workspace_id = w.id
+WHERE u.id = $1 
+LIMIT 1;

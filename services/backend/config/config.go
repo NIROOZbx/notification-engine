@@ -148,7 +148,7 @@ func InitOAuth(cfg *OAuthConfig) {
 		cfg.ClientID, cfg.ClientSecret, cfg.RedirectURL, "email", "profile",
 	))
 
-	log.Println("OAuth providers initialized successfully")
+	log.Println("OAuth providers initialized successfully ✅")
 
 }
 

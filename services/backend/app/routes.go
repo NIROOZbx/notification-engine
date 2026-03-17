@@ -1,20 +1,28 @@
 package app
 
-import ()
+import (
+	"github.com/gofiber/fiber/v3/middleware/logger"
+	"github.com/gofiber/fiber/v3/middleware/recover"
+)
 
 func SetUpRoutes(r *RouterDeps) {
+	r.App.Use(recover.New())
+	r.App.Use(logger.New())
+
 	api := r.App.Group("/api/v1")
 
 	// public
 	auth := api.Group("/auth")
-	auth.Get("/google", r.AuthHandler.OAuthLogin)
-	auth.Get("/google/callback", r.AuthHandler.OAuthCallback)
+	auth.Get("/:provider", r.AuthHandler.OAuthLogin)
+	auth.Get("/:provider/callback", r.AuthHandler.OAuthCallback)
 
 	// onboarding — partial token
 	auth.Post("/onboarding", r.AuthMiddleware.OnboardingAuth, r.AuthHandler.CompleteOnboarding)
+	auth.Post("/register", r.AuthHandler.Register)
 
 	// logout — full token
 	auth.Post("/logout", r.AuthMiddleware.Auth, r.AuthHandler.Logout)
+	auth.Post("/login", r.AuthHandler.Login)
 
 	// protected
 	users := api.Group("/users", r.AuthMiddleware.Auth)
@@ -22,4 +30,12 @@ func SetUpRoutes(r *RouterDeps) {
 
 	workspaces := api.Group("/workspaces", r.AuthMiddleware.Auth)
 	workspaces.Get("/current", r.WspHandler.GetCurrentWorkspace)
+
+	apiKeys := api.Group("/workspaces/current/api-keys", r.AuthMiddleware.Auth)
+
+	apiKeys.Get("/", r.ApiKeyHandler.ListAPIKeys)
+	apiKeys.Post("/", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.CreateAPIKey)
+	apiKeys.Delete("/:keyID", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.DeleteAPIKey)
+	apiKeys.Patch("/:keyID/revoke", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.RevokeAPIKey)
+
 }

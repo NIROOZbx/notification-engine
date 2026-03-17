@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NIROOZbx/notification-engine/services/backend/app"
+	"github.com/gofiber/fiber/v3"
 )
 
 func Run(a *app.App, port string) error {
@@ -20,7 +21,9 @@ func Run(a *app.App, port string) error {
 	errChan := make(chan error, 1)
 
 	go func() {
-		if err := a.Server.Listen(port); err != nil {
+		if err := a.Server.Listen(port,fiber.ListenConfig{
+			EnablePrintRoutes: true,
+		}); err != nil {
 			errChan <- fmt.Errorf("problem in starting app server")
 			return
 		}

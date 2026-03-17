@@ -8,6 +8,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiKey struct {
+	ID            pgtype.UUID      `db:"id" json:"id"`
+	WorkspaceID   pgtype.UUID      `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID      `db:"environment_id" json:"environment_id"`
+	Label         string           `db:"label" json:"label"`
+	KeyHash       string           `db:"key_hash" json:"key_hash"`
+	KeyHint       string           `db:"key_hint" json:"key_hint"`
+	IsRevoked     bool             `db:"is_revoked" json:"is_revoked"`
+	RevokedAt     pgtype.Timestamp `db:"revoked_at" json:"revoked_at"`
+	CreatedBy     pgtype.UUID      `db:"created_by" json:"created_by"`
+	LastUsedAt    pgtype.Timestamp `db:"last_used_at" json:"last_used_at"`
+	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ExpiresAt     pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+}
+
 type Environment struct {
 	ID          pgtype.UUID      `db:"id" json:"id"`
 	WorkspaceID pgtype.UUID      `db:"workspace_id" json:"workspace_id"`

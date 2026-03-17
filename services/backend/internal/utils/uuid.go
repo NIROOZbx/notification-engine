@@ -7,12 +7,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func UUIDToString(id pgtype.UUID) (string, error) {
+func UUIDToString(id pgtype.UUID) string {
 	if !id.Valid {
-		return "", fmt.Errorf("uuid is null")
+		return ""
 	}
-
-	return uuid.UUID(id.Bytes).String(), nil
+	return uuid.UUID(id.Bytes).String()
 }
 
 func StringToUUID(id string) (pgtype.UUID, error) {

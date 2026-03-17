@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createUser = `-- name: CreateUser :one
+
+INSERT INTO users (id,email, full_name, password_hash, auth_provider)
+VALUES (gen_random_uuid(),$1, $2, $3, 'local')
+RETURNING id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
+`
+
+type CreateUserParams struct {
+	Email        string      `db:"email" json:"email"`
+	FullName     string      `db:"full_name" json:"full_name"`
+	PasswordHash pgtype.Text `db:"password_hash" json:"password_hash"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.FullName, arg.PasswordHash)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FullName,
+		&i.AuthProvider,
+		&i.ProviderID,
+		&i.AvatarUrl,
+		&i.IsVerified,
+		&i.IsActive,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const findUserByEmail = `-- name: FindUserByEmail :one
 SELECT id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at FROM users
 WHERE email = $1
@@ -95,16 +128,72 @@ func (q *Queries) FindUserByProviderID(ctx context.Context, arg FindUserByProvid
 	return i, err
 }
 
-const updateLastLogin = `-- name: UpdateLastLogin :exec
-UPDATE users
-SET last_login_at = NOW(),
-    updated_at    = NOW()
-WHERE id = $1
+const getUserAuthContext = `-- name: GetUserAuthContext :one
+SELECT 
+    u.id, 
+    COALESCE(m.role, 'member') as role,
+    COALESCE(m.workspace_id, '00000000-0000-0000-0000-000000000000')::uuid as workspace_id
+FROM users u
+LEFT JOIN workspace_members m ON u.id = m.user_id
+WHERE u.id = $1 
+LIMIT 1
 `
 
-func (q *Queries) UpdateLastLogin(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, updateLastLogin, id)
-	return err
+type GetUserAuthContextRow struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	Role        string      `db:"role" json:"role"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) GetUserAuthContext(ctx context.Context, id pgtype.UUID) (GetUserAuthContextRow, error) {
+	row := q.db.QueryRow(ctx, getUserAuthContext, id)
+	var i GetUserAuthContextRow
+	err := row.Scan(&i.ID, &i.Role, &i.WorkspaceID)
+	return i, err
+}
+
+const getUserWithWorkspace = `-- name: GetUserWithWorkspace :one
+SELECT 
+    u.id AS user_id, 
+    u.full_name, 
+    u.email, 
+    u.avatar_url,
+    COALESCE(m.role, 'member')::varchar AS role,
+    COALESCE(w.id, '00000000-0000-0000-0000-000000000000')::uuid AS workspace_id,
+    COALESCE(w.name, '')::varchar AS workspace_name,
+    COALESCE(w.slug, '')::varchar AS slug
+FROM users u
+LEFT JOIN workspace_members m ON u.id = m.user_id
+LEFT JOIN workspaces w ON m.workspace_id = w.id
+WHERE u.id = $1 
+LIMIT 1
+`
+
+type GetUserWithWorkspaceRow struct {
+	UserID        pgtype.UUID `db:"user_id" json:"user_id"`
+	FullName      string      `db:"full_name" json:"full_name"`
+	Email         string      `db:"email" json:"email"`
+	AvatarUrl     pgtype.Text `db:"avatar_url" json:"avatar_url"`
+	Role          string      `db:"role" json:"role"`
+	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	WorkspaceName string      `db:"workspace_name" json:"workspace_name"`
+	Slug          string      `db:"slug" json:"slug"`
+}
+
+func (q *Queries) GetUserWithWorkspace(ctx context.Context, id pgtype.UUID) (GetUserWithWorkspaceRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithWorkspace, id)
+	var i GetUserWithWorkspaceRow
+	err := row.Scan(
+		&i.UserID,
+		&i.FullName,
+		&i.Email,
+		&i.AvatarUrl,
+		&i.Role,
+		&i.WorkspaceID,
+		&i.WorkspaceName,
+		&i.Slug,
+	)
+	return i, err
 }
 
 const upsertOAuthUser = `-- name: UpsertOAuthUser :one
@@ -115,11 +204,13 @@ INSERT INTO users (
     auth_provider,
     provider_id,
     avatar_url,
-    is_verified
+    is_verified,
+    last_login_at
 ) VALUES (
     gen_random_uuid(),
     $1, $2, $3, $4, $5,
-    true
+    true,
+    NOW()
 )
 ON CONFLICT (email) 
 DO UPDATE SET 
@@ -127,8 +218,7 @@ DO UPDATE SET
     avatar_url    = EXCLUDED.avatar_url,
     auth_provider      = EXCLUDED.auth_provider,
     provider_id   = EXCLUDED.provider_id,
-    last_login_at = NOW(),
-    updated_at    = NOW()
+    last_login_at = NOW() 
 RETURNING id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
 `
 

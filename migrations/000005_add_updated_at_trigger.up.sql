@@ -13,11 +13,3 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON users
 FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER set_updated_at BEFORE UPDATE ON templates
-FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-
-CREATE TRIGGER set_updated_at BEFORE UPDATE ON channel_configs
-FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-
-CREATE TRIGGER set_updated_at BEFORE UPDATE ON subscriptions
-FOR EACH ROW EXECUTE FUNCTION update_updated_at();

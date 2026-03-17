@@ -18,7 +18,7 @@ INSERT INTO workspaces (id, name, slug,plan_id) VALUES
     gen_random_uuid(),
     $1,
     $2,
-    (SELECT id FROM plans WHERE name = 'free' LIMIT 1)
+    (SELECT id FROM plans WHERE name = 'Free' LIMIT 1)
 ) RETURNING * ;
 
 -- name: UpdateWorkspaceName :one
@@ -34,3 +34,10 @@ UPDATE workspaces
 SET plan_id    = $2
 WHERE id = $1
 RETURNING *;
+
+-- name: GetWorkspaceWithPlan :one
+
+SELECT w.id, w.plan_id, p.api_keys_limit
+FROM workspaces w
+JOIN plans p ON p.id = w.plan_id
+WHERE w.id = $1;

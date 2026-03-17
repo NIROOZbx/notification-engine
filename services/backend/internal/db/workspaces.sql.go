@@ -18,7 +18,7 @@ INSERT INTO workspaces (id, name, slug,plan_id) VALUES
     gen_random_uuid(),
     $1,
     $2,
-    (SELECT id FROM plans WHERE name = 'free' LIMIT 1)
+    (SELECT id FROM plans WHERE name = 'Free' LIMIT 1)
 ) RETURNING id, name, slug, plan_id, notif_count_month, billing_cycle_start, created_at, updated_at
 `
 
@@ -93,6 +93,27 @@ func (q *Queries) GetWorkspaceBySlug(ctx context.Context, slug string) (Workspac
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getWorkspaceWithPlan = `-- name: GetWorkspaceWithPlan :one
+
+SELECT w.id, w.plan_id, p.api_keys_limit
+FROM workspaces w
+JOIN plans p ON p.id = w.plan_id
+WHERE w.id = $1
+`
+
+type GetWorkspaceWithPlanRow struct {
+	ID           pgtype.UUID `db:"id" json:"id"`
+	PlanID       pgtype.UUID `db:"plan_id" json:"plan_id"`
+	ApiKeysLimit int32       `db:"api_keys_limit" json:"api_keys_limit"`
+}
+
+func (q *Queries) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (GetWorkspaceWithPlanRow, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceWithPlan, id)
+	var i GetWorkspaceWithPlanRow
+	err := row.Scan(&i.ID, &i.PlanID, &i.ApiKeysLimit)
 	return i, err
 }
 
