@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/NIROOZbx/notification-engine/services/backend/config"
+	"github.com/NIROOZbx/notification-engine/config"
 	"github.com/redis/go-redis/v9"
 )
 

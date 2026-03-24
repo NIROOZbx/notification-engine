@@ -2,14 +2,14 @@ services:
   backend:
     build:
       context: ..
-      dockerfile: services/backend/Dockerfile
+      dockerfile: Dockerfile
     env_file:
       - ../.env
     environment: 
       DB_HOST: database
       DB_PORT: 5432
     volumes:
-      - ../services/backend/logs:/app/logs
+      - ../logs:/app/logs
     ports:
       - 8080:8080
     depends_on:

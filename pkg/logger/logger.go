@@ -3,14 +3,19 @@ package logger
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/NIROOZbx/notification-engine/services/backend/config"
+	"github.com/NIROOZbx/notification-engine/config"
 	"github.com/rs/zerolog"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func NewLogger(cfg *config.LogConfig) zerolog.Logger {
+
+	if err := os.MkdirAll(filepath.Dir(cfg.File), 0755); err != nil {
+		panic("Failed to create log directory: " + err.Error())
+	}
 
 	fileWriter := &lumberjack.Logger{
 		Filename:   cfg.File,

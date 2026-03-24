@@ -11,17 +11,16 @@ pkg/                    ← shared across services
     response/           ← HTTP response helpers
     apperrors/          ← sentinel errors
 
-services/backend/
-    config/             ← Viper config + OAuth setup
-    internal/
-        auth/           ← handler + service
-        user/           ← handler + service
-        workspace/      ← handler + service
-        middleware/     ← JWT auth middleware
-        session/        ← Redis session store
-        db/             ← sqlc generated
-        dtos/           ← request/response types
-        utils/          ← UUID helpers, slugify
+config/                 ← Viper config + OAuth setup
+internal/
     app/                ← fiber setup, routing
-    cmd/                ← entrypoint add this in the architecture.md file
+    auth/               ← handler + service
+    user/               ← handler + service
+    workspace/          ← handler + service
+    middleware/         ← JWT auth middleware
+    session/            ← Redis session store
+    db/                 ← sqlc generated
+    dtos/               ← request/response types
+    utils/              ← UUID helpers, slugify
+cmd/                    ← entrypoint
 ```
