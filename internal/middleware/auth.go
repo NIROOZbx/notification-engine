@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/NIROOZbx/notification-engine/db/sqlc"
 	"github.com/NIROOZbx/notification-engine/config"
+	"github.com/NIROOZbx/notification-engine/consts"
+	"github.com/NIROOZbx/notification-engine/db/sqlc"
 	"github.com/NIROOZbx/notification-engine/internal/session"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
@@ -56,9 +57,9 @@ func (a *authMiddleware) Auth(c fiber.Ctx) error {
 		return response.InternalServerError(c)
 	}
 
-	c.Locals("uid", userID)
-	c.Locals("wid", workspaceID)
-	c.Locals("role", claims.Role)
+	c.Locals(consts.UID, userID)
+	c.Locals(consts.WID, workspaceID)
+	c.Locals(consts.Role, claims.Role)
 
 	a.log.Debug().
 		Str("userID", claims.UserID).
@@ -88,7 +89,7 @@ func (a *authMiddleware) OnboardingAuth(c fiber.Ctx) error {
 		return response.InternalServerError(c)
 	}
 
-	c.Locals("uid", userID)
+	c.Locals(consts.UID, userID)
 
 	return c.Next()
 

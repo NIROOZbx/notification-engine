@@ -11,8 +11,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countWorkspaceLayouts = `-- name: CountWorkspaceLayouts :one
+select count(*)
+from layouts
+where workspace_id = $1
+`
+
+func (q *Queries) CountWorkspaceLayouts(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countWorkspaceLayouts, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countWorkspaceTemplates = `-- name: CountWorkspaceTemplates :one
+SELECT COUNT(*)
+FROM templates
+WHERE workspace_id = $1
+`
+
+func (q *Queries) CountWorkspaceTemplates(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countWorkspaceTemplates, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getAllPlans = `-- name: GetAllPlans :many
-SELECT id, name, notif_limit_month, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at FROM plans
+SELECT id, name, notif_limit_month, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at, max_layouts, max_templates
+FROM plans
 WHERE is_active = true
 ORDER BY price_cents ASC
 `
@@ -38,6 +65,8 @@ func (q *Queries) GetAllPlans(ctx context.Context) ([]Plan, error) {
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MaxLayouts,
+			&i.MaxTemplates,
 		); err != nil {
 			return nil, err
 		}
@@ -50,13 +79,12 @@ func (q *Queries) GetAllPlans(ctx context.Context) ([]Plan, error) {
 }
 
 const getPlanByID = `-- name: GetPlanByID :one
-
-SELECT id, name, notif_limit_month, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at FROM plans
+SELECT id, name, notif_limit_month, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at, max_layouts, max_templates
+FROM plans
 WHERE id = $1
 LIMIT 1
 `
 
-// sql/queries/plans.sql
 func (q *Queries) GetPlanByID(ctx context.Context, id pgtype.UUID) (Plan, error) {
 	row := q.db.QueryRow(ctx, getPlanByID, id)
 	var i Plan
@@ -72,6 +100,37 @@ func (q *Queries) GetPlanByID(ctx context.Context, id pgtype.UUID) (Plan, error)
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MaxLayouts,
+		&i.MaxTemplates,
+	)
+	return i, err
+}
+
+const getPlanByWorkspace = `-- name: GetPlanByWorkspace :one
+SELECT p.id, p.name, p.notif_limit_month, p.members_limit, p.api_keys_limit, p.log_retention_days, p.original_price_cents, p.price_cents, p.is_active, p.created_at, p.updated_at, p.max_layouts, p.max_templates
+from plans as p
+    join workspaces as w on w.plan_id = p.id
+where w.id = $1
+    and is_active = true
+`
+
+func (q *Queries) GetPlanByWorkspace(ctx context.Context, id pgtype.UUID) (Plan, error) {
+	row := q.db.QueryRow(ctx, getPlanByWorkspace, id)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.NotifLimitMonth,
+		&i.MembersLimit,
+		&i.ApiKeysLimit,
+		&i.LogRetentionDays,
+		&i.OriginalPriceCents,
+		&i.PriceCents,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MaxLayouts,
+		&i.MaxTemplates,
 	)
 	return i, err
 }

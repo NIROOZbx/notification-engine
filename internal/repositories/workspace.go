@@ -18,10 +18,12 @@ type WorkspaceRepository interface {
 	UpdateWorkspaceName(ctx context.Context, arg sqlc.UpdateWorkspaceNameParams) (sqlc.Workspace, error)
 	DeleteWorkspace(ctx context.Context, id pgtype.UUID) error
 
-	GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.WorkspaceMember, error)
+	GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.GetWorkspaceMembersWithDetailsRow, error)
 	GetMemberRole(ctx context.Context, arg sqlc.GetMemberRoleParams) (string, error)
 	UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.WorkspaceMember, error)
 	DeleteWorkspaceMember(ctx context.Context, arg sqlc.DeleteWorkspaceMemberParams) error
+	GetOwnerCount(ctx context.Context,workspaceID pgtype.UUID)(int64,error)
+    GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanNameRow, error)
 
 	Atomic(ctx context.Context, fn func(repo WorkspaceRepository) error) error
 }
@@ -38,6 +40,10 @@ func NewWorkspaceRepository(queries *sqlc.Queries, pool *pgxpool.Pool) Workspace
 func (r *workspaceRepo) GetWorkspaceMemberByUserID(ctx context.Context, userID pgtype.UUID) (sqlc.WorkspaceMember, error) {
 	return r.queries.GetWorkspaceMemberByUserID(ctx, userID)
 }
+func (r *workspaceRepo) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanNameRow, error) {
+	return r.queries.GetWorkspaceWithPlanName(ctx, id)
+}
+
 
 func (r *workspaceRepo) FindWorkspaceByID(ctx context.Context, id pgtype.UUID) (sqlc.Workspace, error) {
 	return r.queries.FindWorkspaceByID(ctx, id)
@@ -84,8 +90,8 @@ func (r *workspaceRepo) DeleteWorkspace(ctx context.Context, id pgtype.UUID) err
 	return r.queries.DeleteWorkspace(ctx, id)
 }
 
-func (r *workspaceRepo) GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.WorkspaceMember, error) {
-	return r.queries.GetWorkspaceMembers(ctx, workspaceID)
+func (r *workspaceRepo) GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.GetWorkspaceMembersWithDetailsRow, error) {
+	return r.queries.GetWorkspaceMembersWithDetails(ctx, workspaceID)
 }
 
 func (r *workspaceRepo) GetMemberRole(ctx context.Context, arg sqlc.GetMemberRoleParams) (string, error) {
@@ -98,4 +104,9 @@ func (r *workspaceRepo) UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMem
 
 func (r *workspaceRepo) DeleteWorkspaceMember(ctx context.Context, arg sqlc.DeleteWorkspaceMemberParams) error {
 	return r.queries.DeleteWorkspaceMember(ctx, arg)
+}
+
+func (r *workspaceRepo)GetOwnerCount(ctx context.Context,workspaceID pgtype.UUID)(int64,error){
+
+	return r.queries.CountOwners(ctx,workspaceID)
 }

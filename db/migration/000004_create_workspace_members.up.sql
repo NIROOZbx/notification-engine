@@ -1,11 +1,11 @@
-CREATE TABLE workspace_members (
+CREATE TABLE IF NOT EXISTS workspace_members (
     id           UUID         PRIMARY KEY,
     workspace_id UUID         NOT NULL,
     user_id      UUID         NOT NULL,
     role         VARCHAR(255) NOT NULL DEFAULT 'member', 
     invited_by   UUID         NULL,
-    joined_at    TIMESTAMP    NULL,
-    created_at   TIMESTAMP    NOT NULL DEFAULT NOW(),
+    joined_at    TIMESTAMPTZ    NULL,
+    created_at   TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     
     UNIQUE (workspace_id, user_id),
     FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE,

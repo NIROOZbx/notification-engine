@@ -201,9 +201,9 @@ func mapToCreateAPIKeyResponse(rawKey string, row sqlc.ApiKey) *dtos.CreateAPIKe
 }
 
 func (a *apiKeyService) mapToCreateParams(params CreateAPIKeyParams, expiry *time.Time, keyHash, hint string) sqlc.CreateApiKeyParams {
-	var expiresAt pgtype.Timestamp
+	var expiresAt pgtype.Timestamptz
 	if expiry != nil {
-		expiresAt = pgtype.Timestamp{Time: *expiry, Valid: true}
+		expiresAt = pgtype.Timestamptz{Time: *expiry, Valid: true}
 	}
 
 	return sqlc.CreateApiKeyParams{

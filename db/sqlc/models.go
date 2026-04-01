@@ -9,74 +9,194 @@ import (
 )
 
 type ApiKey struct {
-	ID            pgtype.UUID      `db:"id" json:"id"`
-	WorkspaceID   pgtype.UUID      `db:"workspace_id" json:"workspace_id"`
-	EnvironmentID pgtype.UUID      `db:"environment_id" json:"environment_id"`
-	Label         string           `db:"label" json:"label"`
-	KeyHash       string           `db:"key_hash" json:"key_hash"`
-	KeyHint       string           `db:"key_hint" json:"key_hint"`
-	IsRevoked     bool             `db:"is_revoked" json:"is_revoked"`
-	RevokedAt     pgtype.Timestamp `db:"revoked_at" json:"revoked_at"`
-	CreatedBy     pgtype.UUID      `db:"created_by" json:"created_by"`
-	LastUsedAt    pgtype.Timestamp `db:"last_used_at" json:"last_used_at"`
-	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
-	ExpiresAt     pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+	ID            pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID   pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	Label         string             `db:"label" json:"label"`
+	KeyHash       string             `db:"key_hash" json:"key_hash"`
+	KeyHint       string             `db:"key_hint" json:"key_hint"`
+	IsRevoked     bool               `db:"is_revoked" json:"is_revoked"`
+	RevokedAt     pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	CreatedBy     pgtype.UUID        `db:"created_by" json:"created_by"`
+	LastUsedAt    pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ExpiresAt     pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+type ChannelConfig struct {
+	ID          pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	Channel     string             `db:"channel" json:"channel"`
+	Provider    string             `db:"provider" json:"provider"`
+	DisplayName pgtype.Text        `db:"display_name" json:"display_name"`
+	Credentials []byte             `db:"credentials" json:"credentials"`
+	IsActive    bool               `db:"is_active" json:"is_active"`
+	IsDefault   bool               `db:"is_default" json:"is_default"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type Environment struct {
-	ID          pgtype.UUID      `db:"id" json:"id"`
-	WorkspaceID pgtype.UUID      `db:"workspace_id" json:"workspace_id"`
-	Name        string           `db:"name" json:"name"`
-	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
+	ID          pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	Name        string             `db:"name" json:"name"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type Layout struct {
+	ID          pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	Name        string             `db:"name" json:"name"`
+	IsDefault   bool               `db:"is_default" json:"is_default"`
+	Html        string             `db:"html" json:"html"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type NotificationAttempt struct {
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	NotificationLogID pgtype.UUID        `db:"notification_log_id" json:"notification_log_id"`
+	AttemptCount      int32              `db:"attempt_count" json:"attempt_count"`
+	Provider          string             `db:"provider" json:"provider"`
+	ChannelConfigID   pgtype.UUID        `db:"channel_config_id" json:"channel_config_id"`
+	Status            string             `db:"status" json:"status"`
+	ErrorMessage      pgtype.Text        `db:"error_message" json:"error_message"`
+	ErrorCode         pgtype.Text        `db:"error_code" json:"error_code"`
+	ProviderMessageID pgtype.Text        `db:"provider_message_id" json:"provider_message_id"`
+	DurationMs        pgtype.Int4        `db:"duration_ms" json:"duration_ms"`
+	AttemptedAt       pgtype.Timestamptz `db:"attempted_at" json:"attempted_at"`
+}
+
+type NotificationEvent struct {
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID       pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID     pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	NotificationLogID pgtype.UUID        `db:"notification_log_id" json:"notification_log_id"`
+	Channel           string             `db:"channel" json:"channel"`
+	EventType         string             `db:"event_type" json:"event_type"`
+	ProviderEventID   pgtype.Text        `db:"provider_event_id" json:"provider_event_id"`
+	Metadata          []byte             `db:"metadata" json:"metadata"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type NotificationLog struct {
+	ID              pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID     pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID   pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	TemplateID      pgtype.UUID        `db:"template_id" json:"template_id"`
+	ExternalUserID  string             `db:"external_user_id" json:"external_user_id"`
+	EventType       string             `db:"event_type" json:"event_type"`
+	Channel         string             `db:"channel" json:"channel"`
+	Status          string             `db:"status" json:"status"`
+	RenderedContent []byte             `db:"rendered_content" json:"rendered_content"`
+	IdempotencyKey  string             `db:"idempotency_key" json:"idempotency_key"`
+	AttemptCount    int32              `db:"attempt_count" json:"attempt_count"`
+	IsTest          bool               `db:"is_test" json:"is_test"`
+	QueuedAt        pgtype.Timestamptz `db:"queued_at" json:"queued_at"`
+	Recipient       string             `db:"recipient" json:"recipient"`
+	SentAt          pgtype.Timestamptz `db:"sent_at" json:"sent_at"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type Plan struct {
-	ID                 pgtype.UUID      `db:"id" json:"id"`
-	Name               string           `db:"name" json:"name"`
-	NotifLimitMonth    int32            `db:"notif_limit_month" json:"notif_limit_month"`
-	MembersLimit       int32            `db:"members_limit" json:"members_limit"`
-	ApiKeysLimit       int32            `db:"api_keys_limit" json:"api_keys_limit"`
-	LogRetentionDays   int32            `db:"log_retention_days" json:"log_retention_days"`
-	OriginalPriceCents int32            `db:"original_price_cents" json:"original_price_cents"`
-	PriceCents         int32            `db:"price_cents" json:"price_cents"`
-	IsActive           bool             `db:"is_active" json:"is_active"`
-	CreatedAt          pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt          pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID                 pgtype.UUID        `db:"id" json:"id"`
+	Name               string             `db:"name" json:"name"`
+	NotifLimitMonth    int32              `db:"notif_limit_month" json:"notif_limit_month"`
+	MembersLimit       int32              `db:"members_limit" json:"members_limit"`
+	ApiKeysLimit       int32              `db:"api_keys_limit" json:"api_keys_limit"`
+	LogRetentionDays   int32              `db:"log_retention_days" json:"log_retention_days"`
+	OriginalPriceCents int32              `db:"original_price_cents" json:"original_price_cents"`
+	PriceCents         int32              `db:"price_cents" json:"price_cents"`
+	IsActive           bool               `db:"is_active" json:"is_active"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	MaxLayouts         int32              `db:"max_layouts" json:"max_layouts"`
+	MaxTemplates       int32              `db:"max_templates" json:"max_templates"`
+}
+
+type Template struct {
+	ID            pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID   pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	LayoutID      pgtype.UUID        `db:"layout_id" json:"layout_id"`
+	CreatedBy     pgtype.UUID        `db:"created_by" json:"created_by"`
+	Name          string             `db:"name" json:"name"`
+	Description   pgtype.Text        `db:"description" json:"description"`
+	EventType     string             `db:"event_type" json:"event_type"`
+	Status        string             `db:"status" json:"status"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type TemplateChannel struct {
+	ID              pgtype.UUID        `db:"id" json:"id"`
+	TemplateID      pgtype.UUID        `db:"template_id" json:"template_id"`
+	ChannelConfigID pgtype.UUID        `db:"channel_config_id" json:"channel_config_id"`
+	Channel         string             `db:"channel" json:"channel"`
+	Content         []byte             `db:"content" json:"content"`
+	IsActive        pgtype.Bool        `db:"is_active" json:"is_active"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type User struct {
-	ID           pgtype.UUID      `db:"id" json:"id"`
-	Email        string           `db:"email" json:"email"`
-	PasswordHash pgtype.Text      `db:"password_hash" json:"password_hash"`
-	FullName     string           `db:"full_name" json:"full_name"`
-	AuthProvider string           `db:"auth_provider" json:"auth_provider"`
-	ProviderID   pgtype.Text      `db:"provider_id" json:"provider_id"`
-	AvatarUrl    pgtype.Text      `db:"avatar_url" json:"avatar_url"`
-	IsVerified   bool             `db:"is_verified" json:"is_verified"`
-	IsActive     bool             `db:"is_active" json:"is_active"`
-	LastLoginAt  pgtype.Timestamp `db:"last_login_at" json:"last_login_at"`
-	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID           pgtype.UUID        `db:"id" json:"id"`
+	Email        string             `db:"email" json:"email"`
+	PasswordHash pgtype.Text        `db:"password_hash" json:"password_hash"`
+	FullName     string             `db:"full_name" json:"full_name"`
+	AuthProvider string             `db:"auth_provider" json:"auth_provider"`
+	ProviderID   pgtype.Text        `db:"provider_id" json:"provider_id"`
+	AvatarUrl    pgtype.Text        `db:"avatar_url" json:"avatar_url"`
+	IsVerified   bool               `db:"is_verified" json:"is_verified"`
+	IsActive     bool               `db:"is_active" json:"is_active"`
+	LastLoginAt  pgtype.Timestamptz `db:"last_login_at" json:"last_login_at"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type UserInfo struct {
+	ID             pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID    pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID  pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	ExternalUserID string             `db:"external_user_id" json:"external_user_id"`
+	Channel        string             `db:"channel" json:"channel"`
+	ContactValue   string             `db:"contact_value" json:"contact_value"`
+	Metadata       []byte             `db:"metadata" json:"metadata"`
+	Verified       pgtype.Bool        `db:"verified" json:"verified"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type UserPreference struct {
+	ID            pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID   pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	SubscriberID  pgtype.UUID        `db:"subscriber_id" json:"subscriber_id"`
+	Channel       string             `db:"channel" json:"channel"`
+	EventType     pgtype.Text        `db:"event_type" json:"event_type"`
+	IsEnabled     bool               `db:"is_enabled" json:"is_enabled"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type Workspace struct {
-	ID                pgtype.UUID      `db:"id" json:"id"`
-	Name              string           `db:"name" json:"name"`
-	Slug              string           `db:"slug" json:"slug"`
-	PlanID            pgtype.UUID      `db:"plan_id" json:"plan_id"`
-	NotifCountMonth   int32            `db:"notif_count_month" json:"notif_count_month"`
-	BillingCycleStart pgtype.Date      `db:"billing_cycle_start" json:"billing_cycle_start"`
-	CreatedAt         pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt         pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	Name              string             `db:"name" json:"name"`
+	Slug              string             `db:"slug" json:"slug"`
+	PlanID            pgtype.UUID        `db:"plan_id" json:"plan_id"`
+	NotifCountMonth   int32              `db:"notif_count_month" json:"notif_count_month"`
+	BillingCycleStart pgtype.Date        `db:"billing_cycle_start" json:"billing_cycle_start"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type WorkspaceMember struct {
-	ID          pgtype.UUID      `db:"id" json:"id"`
-	WorkspaceID pgtype.UUID      `db:"workspace_id" json:"workspace_id"`
-	UserID      pgtype.UUID      `db:"user_id" json:"user_id"`
-	Role        string           `db:"role" json:"role"`
-	InvitedBy   pgtype.UUID      `db:"invited_by" json:"invited_by"`
-	JoinedAt    pgtype.Timestamp `db:"joined_at" json:"joined_at"`
-	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
+	ID          pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	UserID      pgtype.UUID        `db:"user_id" json:"user_id"`
+	Role        string             `db:"role" json:"role"`
+	InvitedBy   pgtype.UUID        `db:"invited_by" json:"invited_by"`
+	JoinedAt    pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }

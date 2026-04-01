@@ -5,10 +5,10 @@ import (
 
 	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/services"
+	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/response"
 	"github.com/gofiber/fiber/v3"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
 )
 
@@ -17,13 +17,13 @@ type UserHandler struct {
 	log     zerolog.Logger
 }
 
-func NewUserHandler(svc services.UserService) *UserHandler {
-	return &UserHandler{userSvc: svc}
+func NewUserHandler(svc services.UserService,log zerolog.Logger) *UserHandler {
+	return &UserHandler{userSvc: svc,log: log}
 }
 
 func (u *UserHandler) GetMe(c fiber.Ctx) error {
-	userID, ok := c.Locals("uid").(pgtype.UUID)
-	if !ok {
+	userID, err:= utils.GetUID(c)
+	if err!=nil {
 		u.log.Warn().Msg("GetMe hit without userID in locals")
 		return response.Unauthorized(c, "invalid session")
 	}

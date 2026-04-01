@@ -15,6 +15,7 @@ var (
 	ErrNotFound      = errors.New("resource not found")
 	ErrAlreadyExists = errors.New("resource already exists")
 	ErrInternal      = errors.New("internal server error")
+	ErrBadRequest    = errors.New("bad request")
 )
 
 type NotFoundError struct {

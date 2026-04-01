@@ -12,7 +12,9 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/session"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
+	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
+
 	"github.com/NIROOZbx/notification-engine/pkg/jwt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -54,7 +56,7 @@ func NewAuthService(cfg *config.AuthConfig,
 
 func (a *authService) Register(ctx context.Context, req dtos.RegisterRequest) (*dtos.AuthResponse, *jwt.Pair, error) {
 
-	hashedPassword, err := utils.HashPassword(req.Password)
+	hashedPassword, err := helpers.HashPassword(req.Password)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to hash password: %w", err)
@@ -85,7 +87,7 @@ func (a *authService) Login(ctx context.Context, req dtos.LoginRequest) (*dtos.A
 		return nil, nil, apperrors.ErrUnauthorized
 	}
 
-	err = utils.ComparePassword(user.PasswordHash.String, req.Password)
+	err = helpers.ComparePassword(user.PasswordHash.String, req.Password)
 
 	if err != nil {
 		return nil, nil, apperrors.ErrUnauthorized
@@ -96,12 +98,13 @@ func (a *authService) Login(ctx context.Context, req dtos.LoginRequest) (*dtos.A
 		return nil, nil, fmt.Errorf("checking membership: %w", err)
 	}
 
-	var workspace *sqlc.Workspace
+	var workspace *dtos.WorkspaceResponse
 
 	var role string
 
 	if member != nil {
-		workspace, err = a.workspaceSvc.GetByID(ctx, member.WorkspaceID)
+		wID, _ := utils.StringToUUID(member.WorkspaceID)
+		workspace, err = a.workspaceSvc.GetByID(ctx, wID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to fetch workspace: %w", err)
 		}
@@ -156,7 +159,8 @@ func (a *authService) HandleOAuthCallback(ctx context.Context, user *dtos.OAuthU
 
 	//-------------------------------------------------------------------------------//
 
-	workspace, err := a.workspaceSvc.GetByID(ctx, member.WorkspaceID)
+	wID, _ := utils.StringToUUID(member.WorkspaceID)
+	workspace, err := a.workspaceSvc.GetByID(ctx, wID)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("fetching workspace: %w", err)
@@ -228,7 +232,7 @@ func (a *authService) generateSession(ctx context.Context, p sessionParams) (*jw
 
 }
 
-func mapToDTO(user *sqlc.User, wsp *sqlc.Workspace, role string) (*dtos.AuthResponse, error) {
+func mapToDTO(user *sqlc.User, wsp *dtos.WorkspaceResponse, role string) (*dtos.AuthResponse, error) {
 	userID := utils.UUIDToString(user.ID)
 	if userID == "" {
 		return nil, fmt.Errorf("user_id is missing or invalid: %s", userID)
@@ -251,7 +255,7 @@ func mapToDTO(user *sqlc.User, wsp *sqlc.Workspace, role string) (*dtos.AuthResp
 	var workspaceID string
 
 	if wsp != nil {
-		workspaceID = utils.UUIDToString(wsp.ID)
+		
 		if workspaceID == "" {
 			return nil, fmt.Errorf("missing valid workspace_id %s", workspaceID)
 		}
@@ -269,7 +273,7 @@ func mapToDTO(user *sqlc.User, wsp *sqlc.Workspace, role string) (*dtos.AuthResp
 
 }
 
-func (a *authService) buildAuthResult(ctx context.Context, user *sqlc.User, workspace *sqlc.Workspace, isOnboarded bool, role string) (*dtos.AuthResponse, *jwt.Pair, error) {
+func (a *authService) buildAuthResult(ctx context.Context, user *sqlc.User, workspace *dtos.WorkspaceResponse, isOnboarded bool, role string) (*dtos.AuthResponse, *jwt.Pair, error) {
 	if user == nil {
 		return nil, nil, fmt.Errorf("developer error: user cannot be nil in buildAuthResult")
 	}
@@ -277,7 +281,7 @@ func (a *authService) buildAuthResult(ctx context.Context, user *sqlc.User, work
 	var workspaceID pgtype.UUID
 
 	if workspace != nil {
-		workspaceID = workspace.ID
+		workspaceID, _ = utils.StringToUUID(workspace.ID)
 	}
 	p := sessionParams{
 		userID:      user.ID,

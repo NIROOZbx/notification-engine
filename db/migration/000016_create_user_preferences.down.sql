@@ -1,0 +1,1 @@
+drop TABLE if EXISTS user_preferences;

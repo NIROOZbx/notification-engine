@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/internal/services"
 	"github.com/NIROOZbx/notification-engine/pkg/response"
 	"github.com/gofiber/fiber/v3"
@@ -30,9 +31,9 @@ func (a *apiKeyMiddleware) Authenticate(c fiber.Ctx) error {
 		return response.Unauthorized(c, "invalid api key")
 	}
 
-	c.Locals("wid", validatedKey.WorkspaceID)
-	c.Locals("envID", validatedKey.EnvID)
-	c.Locals("keyID", validatedKey.ID)
+	c.Locals(consts.WID, validatedKey.WorkspaceID)
+	c.Locals(consts.ENVID, validatedKey.EnvID)
+	c.Locals(consts.KEYID, validatedKey.ID)
 
 	a.log.Debug().
 		Str("workspaceID", validatedKey.WorkspaceID.String()).

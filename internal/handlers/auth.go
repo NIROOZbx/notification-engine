@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/NIROOZbx/notification-engine/config"
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/services"
 	"github.com/NIROOZbx/notification-engine/pkg/jwt"
@@ -95,7 +96,7 @@ func (h *AuthHandler) OAuthCallback(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) CompleteOnboarding(c fiber.Ctx) error {
-	userID := c.Locals("uid").(pgtype.UUID)
+	userID := c.Locals(consts.UID).(pgtype.UUID)
 	var req dtos.OnboardingRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		h.log.Warn().Err(err).Msg("Invalid request body payload during onboarding")
@@ -115,7 +116,7 @@ func (h *AuthHandler) CompleteOnboarding(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Logout(c fiber.Ctx) error {
-	userID:=c.Locals("uid").(pgtype.UUID)
+	userID:=c.Locals(consts.UID).(pgtype.UUID)
 
 	refreshToken := c.Cookies("refresh_token")
 

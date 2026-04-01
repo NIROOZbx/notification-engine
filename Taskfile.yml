@@ -50,6 +50,16 @@ tasks:
     cmds:
       - echo "Forcing database migration..."
       - migrate -path {{.MIGRATION_PATH}} -database "{{.DB_URL}}" force {{.CLI_ARGS}}
+  
+  gen-sqlc:
+    desc: "Generate SQLC code from anywhere"
+    dir: C:\notification-engine\db
+    cmds:
+      - sqlc generate
+  mock:
+    desc: "Generate mocks for the WorkspaceRepository"
+    cmds:
+      - mockery --name=WorkspaceRepository --dir=internal/repositories --output=internal/repositories/mocks
 
   start:
     desc: Full boot sequence (Infra -> Migrate -> Logs)

@@ -1,4 +1,4 @@
-CREATE TABLE api_keys (
+CREATE TABLE IF NOT EXISTS api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL,
     environment_id UUID NOT NULL,
@@ -6,12 +6,12 @@ CREATE TABLE api_keys (
     key_hash VARCHAR(255) UNIQUE NOT NULL,
     key_hint VARCHAR(25) NOT NULL,
     is_revoked BOOLEAN NOT NULL DEFAULT FALSE,
-    revoked_at TIMESTAMP,
+    revoked_at TIMESTAMPTZ,
     created_by UUID,
-    last_used_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    expires_at TIMESTAMP,
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
     FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
     FOREIGN KEY(environment_id) REFERENCES environments(id) ON DELETE CASCADE,
     FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE

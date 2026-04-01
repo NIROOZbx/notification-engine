@@ -1,1 +1,1 @@
-ALTER TABLE plans DROP CONSTRAINT plans_name_unique;
+ALTER TABLE plans DROP CONSTRAINT IF EXISTS plans_name_unique;

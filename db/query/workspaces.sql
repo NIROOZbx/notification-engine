@@ -1,6 +1,16 @@
 -- name: FindWorkspaceByID :one
-
 SELECT * from workspaces where id = $1 LIMIT 1;
+
+-- name: GetWorkspaceWithPlanName :one
+SELECT 
+    w.id, 
+    w.name, 
+    w.slug, 
+    p.name as plan_name,
+    w.created_at
+FROM workspaces w
+JOIN plans p ON w.plan_id = p.id
+WHERE w.id = $1;
 
 -- name: GetWorkspaceBySlug :one
 SELECT * FROM workspaces

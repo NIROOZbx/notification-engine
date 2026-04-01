@@ -40,13 +40,13 @@ RETURNING id, workspace_id, environment_id, label, key_hash, key_hint, is_revoke
 `
 
 type CreateApiKeyParams struct {
-	WorkspaceID   pgtype.UUID      `db:"workspace_id" json:"workspace_id"`
-	EnvironmentID pgtype.UUID      `db:"environment_id" json:"environment_id"`
-	Label         string           `db:"label" json:"label"`
-	KeyHash       string           `db:"key_hash" json:"key_hash"`
-	KeyHint       string           `db:"key_hint" json:"key_hint"`
-	CreatedBy     pgtype.UUID      `db:"created_by" json:"created_by"`
-	ExpiresAt     pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+	WorkspaceID   pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	Label         string             `db:"label" json:"label"`
+	KeyHash       string             `db:"key_hash" json:"key_hash"`
+	KeyHint       string             `db:"key_hint" json:"key_hint"`
+	CreatedBy     pgtype.UUID        `db:"created_by" json:"created_by"`
+	ExpiresAt     pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 }
 
 func (q *Queries) CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (ApiKey, error) {
@@ -156,18 +156,18 @@ type ListAPIKeysByWorkspaceAndEnvParams struct {
 }
 
 type ListAPIKeysByWorkspaceAndEnvRow struct {
-	ID            pgtype.UUID      `db:"id" json:"id"`
-	WorkspaceID   pgtype.UUID      `db:"workspace_id" json:"workspace_id"`
-	EnvironmentID pgtype.UUID      `db:"environment_id" json:"environment_id"`
-	Label         string           `db:"label" json:"label"`
-	KeyHint       string           `db:"key_hint" json:"key_hint"`
-	IsRevoked     bool             `db:"is_revoked" json:"is_revoked"`
-	RevokedAt     pgtype.Timestamp `db:"revoked_at" json:"revoked_at"`
-	ExpiresAt     pgtype.Timestamp `db:"expires_at" json:"expires_at"`
-	CreatedBy     pgtype.UUID      `db:"created_by" json:"created_by"`
-	LastUsedAt    pgtype.Timestamp `db:"last_used_at" json:"last_used_at"`
-	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID            pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID   pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	Label         string             `db:"label" json:"label"`
+	KeyHint       string             `db:"key_hint" json:"key_hint"`
+	IsRevoked     bool               `db:"is_revoked" json:"is_revoked"`
+	RevokedAt     pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	ExpiresAt     pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedBy     pgtype.UUID        `db:"created_by" json:"created_by"`
+	LastUsedAt    pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 func (q *Queries) ListAPIKeysByWorkspaceAndEnv(ctx context.Context, arg ListAPIKeysByWorkspaceAndEnvParams) ([]ListAPIKeysByWorkspaceAndEnvRow, error) {
@@ -219,9 +219,9 @@ type RevokeAPIKeyParams struct {
 }
 
 type RevokeAPIKeyRow struct {
-	ID        pgtype.UUID      `db:"id" json:"id"`
-	IsRevoked bool             `db:"is_revoked" json:"is_revoked"`
-	RevokedAt pgtype.Timestamp `db:"revoked_at" json:"revoked_at"`
+	ID        pgtype.UUID        `db:"id" json:"id"`
+	IsRevoked bool               `db:"is_revoked" json:"is_revoked"`
+	RevokedAt pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
 }
 
 func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (RevokeAPIKeyRow, error) {

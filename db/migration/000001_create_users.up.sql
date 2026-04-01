@@ -8,9 +8,9 @@ CREATE TABLE users (
     avatar_url VARCHAR(255),
     is_verified   BOOLEAN      NOT NULL DEFAULT FALSE, 
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
-    last_login_at TIMESTAMP    NULL,                 
-    created_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+    last_login_at TIMESTAMPTZ  NULL,                 
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX users_email_index ON users (email);

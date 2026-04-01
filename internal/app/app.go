@@ -12,6 +12,7 @@ import (
 
 	"github.com/NIROOZbx/notification-engine/pkg/cache"
 	"github.com/NIROOZbx/notification-engine/pkg/logger"
+	"github.com/NIROOZbx/notification-engine/pkg/validator"
 	"github.com/bytedance/sonic"
 
 	"github.com/gofiber/fiber/v3"
@@ -36,6 +37,7 @@ type RouterDeps struct {
 	ApiKeyHandler    *handlers.APIKeyHandler
 	ApiKeyMiddleware middleware.ApiKeyMiddleware
 }
+
 
 func StartApp(cfg *config.Config) (*App, error) {
 
@@ -62,6 +64,8 @@ func StartApp(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 
+	v :=validator.NewValidator()
+
 	// ==========================================
 	// 2. REPOSITORIES & DATA STORES
 	// ==========================================
@@ -78,7 +82,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	// ==========================================
 
 	userService := services.NewUserService(usrRepo)
-	workspaceService := services.NewService(wspRepo)
+	workspaceService := services.NewWorkSpaceService(wspRepo)
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
 
@@ -86,7 +90,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	// 4. HTTP LAYER (Handlers & Middleware)
 	// ==========================================
 
-	userHandler := handlers.NewUserHandler(userService)
+	userHandler := handlers.NewUserHandler(userService,appLogger)
 	wspHandler := handlers.NewWorkspaceHandler(workspaceService)
 	authHandler := handlers.NewAuthHandler(authService, &cfg.Auth, appLogger)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService, appLogger)
@@ -102,7 +106,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		BodyLimit:    10 * 1024 * 1024,
+		StructValidator: v,
 	})
+	
 
 	authMiddleware := middleware.NewMiddleware(store, &cfg.Auth, appLogger,repo)
 	apiKeyMiddleware := middleware.NewApiKeyMiddleware(apiKeyService, appLogger)

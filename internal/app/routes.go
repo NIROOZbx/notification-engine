@@ -15,14 +15,14 @@ func SetUpRoutes(r *RouterDeps) {
 	auth := api.Group("/auth")
 	auth.Get("/:provider", r.AuthHandler.OAuthLogin)
 	auth.Get("/:provider/callback", r.AuthHandler.OAuthCallback)
+	auth.Post("/register", r.AuthHandler.Register)
+	auth.Post("/login", r.AuthHandler.Login)
 
 	// onboarding — partial token
 	auth.Post("/onboarding", r.AuthMiddleware.OnboardingAuth, r.AuthHandler.CompleteOnboarding)
-	auth.Post("/register", r.AuthHandler.Register)
 
 	// logout — full token
 	auth.Post("/logout", r.AuthMiddleware.Auth, r.AuthHandler.Logout)
-	auth.Post("/login", r.AuthHandler.Login)
 
 	// protected
 	users := api.Group("/users", r.AuthMiddleware.Auth)
@@ -30,6 +30,13 @@ func SetUpRoutes(r *RouterDeps) {
 
 	workspaces := api.Group("/workspaces", r.AuthMiddleware.Auth)
 	workspaces.Get("/current", r.WspHandler.GetCurrentWorkspace)
+	workspaces.Patch("/current", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateName)
+
+	members := workspaces.Group("/current/members")
+    members.Get("/", r.WspHandler.GetWorkspaceMembers)
+	members.Patch("/:userID/role",r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
+	members.Delete("/:userID",r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
+
 
 	apiKeys := api.Group("/workspaces/current/api-keys", r.AuthMiddleware.Auth)
 

@@ -11,6 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countOwners = `-- name: CountOwners :one
+SELECT count(*) 
+FROM workspace_members 
+WHERE workspace_id = $1 AND role = 'owner'
+`
+
+func (q *Queries) CountOwners(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countOwners, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createWorkspaceMember = `-- name: CreateWorkspaceMember :one
 INSERT INTO workspace_members (id, workspace_id, user_id, role, joined_at)
 VALUES (gen_random_uuid(), $1, $2, $3, NOW())
@@ -135,6 +148,58 @@ func (q *Queries) GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UU
 			&i.InvitedBy,
 			&i.JoinedAt,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getWorkspaceMembersWithDetails = `-- name: GetWorkspaceMembersWithDetails :many
+SELECT 
+    m.workspace_id,
+    m.user_id, 
+    u.full_name as name, 
+    u.email, 
+    u.avatar_url, 
+    m.role, 
+    m.joined_at
+FROM workspace_members m
+JOIN users u ON m.user_id = u.id
+WHERE m.workspace_id = $1
+`
+
+type GetWorkspaceMembersWithDetailsRow struct {
+	WorkspaceID pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	UserID      pgtype.UUID        `db:"user_id" json:"user_id"`
+	Name        string             `db:"name" json:"name"`
+	Email       string             `db:"email" json:"email"`
+	AvatarUrl   pgtype.Text        `db:"avatar_url" json:"avatar_url"`
+	Role        string             `db:"role" json:"role"`
+	JoinedAt    pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
+}
+
+func (q *Queries) GetWorkspaceMembersWithDetails(ctx context.Context, workspaceID pgtype.UUID) ([]GetWorkspaceMembersWithDetailsRow, error) {
+	rows, err := q.db.Query(ctx, getWorkspaceMembersWithDetails, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetWorkspaceMembersWithDetailsRow
+	for rows.Next() {
+		var i GetWorkspaceMembersWithDetailsRow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.UserID,
+			&i.Name,
+			&i.Email,
+			&i.AvatarUrl,
+			&i.Role,
+			&i.JoinedAt,
 		); err != nil {
 			return nil, err
 		}

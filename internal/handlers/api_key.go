@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/services"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
@@ -22,8 +23,8 @@ func NewAPIKeyHandler(svc services.APIKeyService,log zerolog.Logger) *APIKeyHand
 
 func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 
-	userID := c.Locals("uid").(pgtype.UUID)
-	workspaceID := c.Locals("wid").(pgtype.UUID)
+	userID := c.Locals(consts.UID).(pgtype.UUID)
+	workspaceID := c.Locals(consts.WID).(pgtype.UUID)
 
 	log := h.log.With().
 		Interface("user_id", userID).
@@ -72,10 +73,10 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 }
 
 func (h *APIKeyHandler) RevokeAPIKey(c fiber.Ctx) error {
-	workspaceID := c.Locals("wid").(pgtype.UUID)
+	workspaceID := c.Locals(consts.WID).(pgtype.UUID)
 
-	keyID, err := utils.StringToUUID(c.Params("keyID"))
-	if err != nil {
+	keyID, ok := utils.ParseIDParam(c,"keyID")
+	if !ok {
 		return response.BadRequest(c, nil, "invalid key_id")
 	}
 
@@ -103,7 +104,7 @@ func (h *APIKeyHandler) RevokeAPIKey(c fiber.Ctx) error {
 }
 
 func (h *APIKeyHandler) DeleteAPIKey(c fiber.Ctx) error {
-	workspaceID := c.Locals("wid").(pgtype.UUID)
+	workspaceID := c.Locals(consts.WID).(pgtype.UUID)
 	
 
 	keyID, err := utils.StringToUUID(c.Params("keyID"))
@@ -136,7 +137,7 @@ func (h *APIKeyHandler) DeleteAPIKey(c fiber.Ctx) error {
 }
 
 func (h *APIKeyHandler) ListAPIKeys(c fiber.Ctx) error {
-	workspaceID := c.Locals("wid").(pgtype.UUID)
+	workspaceID := c.Locals(consts.WID).(pgtype.UUID)
 
 	envIDStr := c.Query("env_id")
 	if envIDStr == "" {

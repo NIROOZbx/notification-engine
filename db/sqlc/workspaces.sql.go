@@ -54,7 +54,6 @@ func (q *Queries) DeleteWorkspace(ctx context.Context, id pgtype.UUID) error {
 }
 
 const findWorkspaceByID = `-- name: FindWorkspaceByID :one
-
 SELECT id, name, slug, plan_id, notif_count_month, billing_cycle_start, created_at, updated_at from workspaces where id = $1 LIMIT 1
 `
 
@@ -114,6 +113,39 @@ func (q *Queries) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (Get
 	row := q.db.QueryRow(ctx, getWorkspaceWithPlan, id)
 	var i GetWorkspaceWithPlanRow
 	err := row.Scan(&i.ID, &i.PlanID, &i.ApiKeysLimit)
+	return i, err
+}
+
+const getWorkspaceWithPlanName = `-- name: GetWorkspaceWithPlanName :one
+SELECT 
+    w.id, 
+    w.name, 
+    w.slug, 
+    p.name as plan_name,
+    w.created_at
+FROM workspaces w
+JOIN plans p ON w.plan_id = p.id
+WHERE w.id = $1
+`
+
+type GetWorkspaceWithPlanNameRow struct {
+	ID        pgtype.UUID        `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	Slug      string             `db:"slug" json:"slug"`
+	PlanName  string             `db:"plan_name" json:"plan_name"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) GetWorkspaceWithPlanName(ctx context.Context, id pgtype.UUID) (GetWorkspaceWithPlanNameRow, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceWithPlanName, id)
+	var i GetWorkspaceWithPlanNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.PlanName,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
