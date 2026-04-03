@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     billing_cycle_start  DATE         NOT NULL DEFAULT CURRENT_DATE,
     created_at           TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-    FOREIGN KEY (plan_id) REFERENCES plans (id)
+    FOREIGN KEY (plan_id) REFERENCES plans (id) on delete cascade
 );
 
 CREATE INDEX workspaces_slug_index    ON workspaces (slug);

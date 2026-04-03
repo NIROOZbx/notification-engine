@@ -6,4 +6,5 @@ type TriggerPayload struct{
 	EventType string
 	Data map[string]any
 	IdempotencyKey string 
+	IsTest bool
 }

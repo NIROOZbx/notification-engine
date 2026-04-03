@@ -6,7 +6,7 @@ type mockProvider struct {
 	channel string
 }
 
-func NewmockProvider(ch string) *mockProvider {
+func NewMockProvider(ch string) *mockProvider {
 	return &mockProvider{
 		channel: ch,
 	}

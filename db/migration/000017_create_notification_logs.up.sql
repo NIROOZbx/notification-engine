@@ -10,7 +10,7 @@ create table if NOT EXISTS notification_logs (
                 'email',
                 'sms',
                 'push',
-                'chat',
+                'slack',
                 'whatsapp',
                 'webhook',
                 'in_app'

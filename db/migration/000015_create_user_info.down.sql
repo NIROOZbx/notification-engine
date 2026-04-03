@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS user_contact_info;
+DROP TABLE IF EXISTS user_info;

@@ -1,4 +1,4 @@
-CREATE TABLE plans (
+CREATE TABLE IF not exists plans (
     id                    UUID         PRIMARY KEY,
     name                  VARCHAR(255) NOT NULL,      
     notif_limit_month     INTEGER      NOT NULL DEFAULT 1000,  

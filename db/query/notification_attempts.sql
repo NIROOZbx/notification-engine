@@ -16,3 +16,6 @@ SELECT * FROM notification_attempts
 WHERE notification_log_id = $1
 ORDER BY attempt_count ASC;
 
+--name: GetAttemptCountByLogID :one
+
+SELECT attempt_count from notification_attempts where notif_log_id =$1;

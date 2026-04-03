@@ -1,9 +1,11 @@
 package models
 
-type NotificationEvent struct{
-	NotificationLodID string
-	WorkspaceID string 
-	EnviornmentID string 
-	Channel string
-	AttemptNumber	 string
+type NotificationEvent struct {
+	NotificationLogID string
+	WorkspaceID       string
+	EnvironmentID     string
+	Channel           string
+	Data map[string]any
+	AttemptNumber     int
+	Recipient string
 }

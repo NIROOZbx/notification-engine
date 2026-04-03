@@ -2,3 +2,4 @@
 logs/
 *.log
 k6/
+docs/

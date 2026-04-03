@@ -2,6 +2,8 @@ package queue
 
 import (
 	"context"
+	"time"
+
 	"github.com/bytedance/sonic"
 	"github.com/segmentio/kafka-go"
 )
@@ -15,6 +17,9 @@ func NewProducer(brokerAddr string) *producer {
 		writer: &kafka.Writer{
 			Addr:     kafka.TCP(brokerAddr),
 			Balancer: &kafka.LeastBytes{},
+			BatchSize: 100,
+			BatchTimeout: 10 * time.Millisecond,
+			RequiredAcks: kafka.RequireAll,
 		},
 	}
 }
