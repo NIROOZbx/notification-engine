@@ -41,6 +41,7 @@ type ValidatedKey struct {
 	ID          pgtype.UUID
 	WorkspaceID pgtype.UUID
 	EnvID       pgtype.UUID
+	IsTest      bool
 }
 
 type APIKeyService interface {
@@ -176,11 +177,12 @@ func (a *apiKeyService) ValidateAPIKey(ctx context.Context, rawKey string) (*Val
 	if err != nil {
 		return nil, apperrors.ErrUnauthorized
 	}
-
+	isTest := strings.HasPrefix(rawKey, "ne_test_")
 	return &ValidatedKey{
 		ID:          validatedKey.ID,
 		WorkspaceID: validatedKey.WorkspaceID,
 		EnvID:       validatedKey.EnvironmentID,
+		IsTest:      isTest,
 	}, nil
 }
 

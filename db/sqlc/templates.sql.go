@@ -77,3 +77,33 @@ func (q *Queries) GetTemplateByEventType(ctx context.Context, arg GetTemplateByE
 	)
 	return i, err
 }
+
+const getTemplateByID = `-- name: GetTemplateByID :one
+SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at FROM templates
+WHERE id = $1 AND workspace_id = $2
+LIMIT 1
+`
+
+type GetTemplateByIDParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) GetTemplateByID(ctx context.Context, arg GetTemplateByIDParams) (Template, error) {
+	row := q.db.QueryRow(ctx, getTemplateByID, arg.ID, arg.WorkspaceID)
+	var i Template
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EnvironmentID,
+		&i.LayoutID,
+		&i.CreatedBy,
+		&i.Name,
+		&i.Description,
+		&i.EventType,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

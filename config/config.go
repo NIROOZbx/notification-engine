@@ -60,6 +60,11 @@ type AuthConfig struct {
 	Environment         string `mapstructure:"environment"`
 }
 
+type KafkaConfig struct {
+	Broker  string `mapstructure:"broker"`
+	GroupID string `mapstructure:"group_id"`
+}
+
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Log      LogConfig      `mapstructure:"log"`
@@ -67,6 +72,7 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Auth     AuthConfig     `mapstructure:"auth"`
 	OAuth    OAuthConfig    `mapstructure:"oauth"`
+	Kafka    KafkaConfig    `mapstructure:"kafka"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -99,6 +105,9 @@ func LoadConfig() (*Config, error) {
 	v.BindEnv("oauth.client_id", "CLIENT_ID")
 	v.BindEnv("oauth.client_secret", "CLIENT_SECRET")
 	v.BindEnv("oauth.redirect_url", "REDIRECT_URL")
+
+	v.BindEnv("kafka.broker", "KAFKA_BROKER")
+	v.BindEnv("kafka.group_id", "KAFKA_GROUP_ID")
 	var cfg Config
 
 	if err := v.Unmarshal(&cfg); err != nil {
@@ -134,6 +143,7 @@ func validate(cfg *Config) {
 		{cfg.OAuth.ClientID, "CLIENT_ID"},
 		{cfg.OAuth.ClientSecret, "CLIENT_SECRET"},
 		{cfg.OAuth.RedirectURL, "REDIRECT_URL"},
+		{cfg.Kafka.Broker, "KAFKA_BROKER"},
 	}
 
 	for _, rule := range rules {

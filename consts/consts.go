@@ -5,6 +5,7 @@ const (
 	WID="wid"
 	ENVID="envID"
 	KEYID="keyID"
+	ISTEST="isTest"
 	Role="role"
 	MaxAttempts = 3
 

@@ -20,6 +20,14 @@ func Created(c fiber.Ctx, message string, data interface{}) error {
 	})
 }
 
+func Accepted(c fiber.Ctx,message string,data interface{})error{
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"success": true,
+		"message": message,
+		"data":    data,
+	})
+}
+
 func BadRequest(c fiber.Ctx, data interface{}, message string) error {
 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 		"success": false,

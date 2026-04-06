@@ -21,3 +21,10 @@ func StringToUUID(id string) (pgtype.UUID, error) {
 	}
 	return pgtype.UUID{Bytes: parsed, Valid: true}, nil
 }
+func MustStringToUUID(id string) pgtype.UUID {
+    parsed, err := uuid.Parse(id)
+    if err != nil {
+        return pgtype.UUID{}
+    }
+    return pgtype.UUID{Bytes: parsed, Valid: true}
+}

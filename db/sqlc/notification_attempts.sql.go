@@ -11,6 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getAttemptCountByLogID = `-- name: GetAttemptCountByLogID :one
+
+SELECT attempt_count from notification_attempts where notification_log_id =$1
+`
+
+func (q *Queries) GetAttemptCountByLogID(ctx context.Context, notificationLogID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, getAttemptCountByLogID, notificationLogID)
+	var attempt_count int32
+	err := row.Scan(&attempt_count)
+	return attempt_count, err
+}
+
 const getAttemptsByNotificationLogID = `-- name: GetAttemptsByNotificationLogID :many
 SELECT id, notification_log_id, attempt_count, provider, channel_config_id, status, error_message, error_code, provider_message_id, duration_ms, attempted_at FROM notification_attempts
 WHERE notification_log_id = $1
@@ -56,9 +68,10 @@ INSERT INTO notification_attempts (
     status,
     error_message,
     provider,
+    duration_ms,
     attempted_at
 ) VALUES (
-    $1, $2, $3, $4, $5, NOW()
+    $1, $2, $3, $4, $5,$6, NOW()
 )
 RETURNING id, notification_log_id, attempt_count, provider, channel_config_id, status, error_message, error_code, provider_message_id, duration_ms, attempted_at
 `
@@ -69,6 +82,7 @@ type InsertNotificationAttemptParams struct {
 	Status            string      `db:"status" json:"status"`
 	ErrorMessage      pgtype.Text `db:"error_message" json:"error_message"`
 	Provider          string      `db:"provider" json:"provider"`
+	DurationMs        pgtype.Int4 `db:"duration_ms" json:"duration_ms"`
 }
 
 func (q *Queries) InsertNotificationAttempt(ctx context.Context, arg InsertNotificationAttemptParams) (NotificationAttempt, error) {
@@ -78,6 +92,7 @@ func (q *Queries) InsertNotificationAttempt(ctx context.Context, arg InsertNotif
 		arg.Status,
 		arg.ErrorMessage,
 		arg.Provider,
+		arg.DurationMs,
 	)
 	var i NotificationAttempt
 	err := row.Scan(

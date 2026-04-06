@@ -24,3 +24,7 @@ return "mock"
 func (m *mockProvider)Channel()string{
 return m.channel
 }
+
+func(m *mockProvider)RequiredFields()[]string{
+	return []string{"subject"}
+}

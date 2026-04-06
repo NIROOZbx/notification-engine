@@ -7,15 +7,17 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// sentinel errors — for simple cases
 var (
-	ErrInvalidInput  = errors.New("invalid input provided")
-	ErrUnauthorized  = errors.New("unauthorized: invalid or missing session")
-	ErrForbidden     = errors.New("forbidden: you do not have permission to perform this action")
-	ErrNotFound      = errors.New("resource not found")
-	ErrAlreadyExists = errors.New("resource already exists")
-	ErrInternal      = errors.New("internal server error")
-	ErrBadRequest    = errors.New("bad request")
+	ErrInvalidInput     = errors.New("invalid input provided")
+	ErrUnauthorized     = errors.New("unauthorized: invalid or missing session")
+	ErrForbidden        = errors.New("forbidden: you do not have permission to perform this action")
+	ErrNotFound         = errors.New("resource not found")
+	ErrAlreadyExists    = errors.New("resource already exists")
+	ErrInternal         = errors.New("internal server error")
+	ErrBadRequest       = errors.New("bad request")
+	ErrTemplateNotFound = errors.New("template not found")
+	ErrTemplateNotLive  = errors.New("template is not live")
+	ErrNoActiveChannels = errors.New("no active channels for template")
 )
 
 type NotFoundError struct {

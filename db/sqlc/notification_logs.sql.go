@@ -77,11 +77,12 @@ INSERT INTO notification_logs (
     external_user_id,
     event_type,
     channel,
+    status,
     recipient,
     idempotency_key,
     is_test
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9,$10
 )
 RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at
 `
@@ -93,6 +94,7 @@ type InsertNotificationLogParams struct {
 	ExternalUserID string      `db:"external_user_id" json:"external_user_id"`
 	EventType      string      `db:"event_type" json:"event_type"`
 	Channel        string      `db:"channel" json:"channel"`
+	Status         string      `db:"status" json:"status"`
 	Recipient      string      `db:"recipient" json:"recipient"`
 	IdempotencyKey string      `db:"idempotency_key" json:"idempotency_key"`
 	IsTest         bool        `db:"is_test" json:"is_test"`
@@ -106,6 +108,7 @@ func (q *Queries) InsertNotificationLog(ctx context.Context, arg InsertNotificat
 		arg.ExternalUserID,
 		arg.EventType,
 		arg.Channel,
+		arg.Status,
 		arg.Recipient,
 		arg.IdempotencyKey,
 		arg.IsTest,

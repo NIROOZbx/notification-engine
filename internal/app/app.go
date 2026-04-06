@@ -1,9 +1,14 @@
 package app
 
 import (
+
 	"github.com/NIROOZbx/notification-engine/config"
 	"github.com/NIROOZbx/notification-engine/db"
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
+	"github.com/NIROOZbx/notification-engine/engine/notification/core"
+	"github.com/NIROOZbx/notification-engine/engine/notification/provider"
+	"github.com/NIROOZbx/notification-engine/engine/notification/queue"
+	"github.com/NIROOZbx/notification-engine/engine/notification/template"
 	"github.com/NIROOZbx/notification-engine/internal/handlers"
 	"github.com/NIROOZbx/notification-engine/internal/middleware"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
@@ -22,10 +27,13 @@ import (
 )
 
 type App struct {
-	Server *fiber.App
-	Redis  *redis.Client
-	DB     *pgxpool.Pool
-	Logger zerolog.Logger
+	Server   *fiber.App
+	Redis    *redis.Client
+	DB       *pgxpool.Pool
+	Logger   zerolog.Logger
+	Producer core.Producer
+	Consumer map[string]queue.Consumer
+	Engine   *core.Engine
 }
 
 type RouterDeps struct {
@@ -36,8 +44,9 @@ type RouterDeps struct {
 	AuthMiddleware   middleware.AuthMiddleware
 	ApiKeyHandler    *handlers.APIKeyHandler
 	ApiKeyMiddleware middleware.ApiKeyMiddleware
+	NotifHandler *handlers.NotificationHandler
+	SubscriberHandler *handlers.SubscriberHandler
 }
-
 
 func StartApp(cfg *config.Config) (*App, error) {
 
@@ -46,6 +55,8 @@ func StartApp(cfg *config.Config) (*App, error) {
 	// ==========================================
 
 	appLogger := logger.NewLogger(&cfg.Log)
+
+	kafkaCfg:=cfg.Kafka
 
 	db, err := db.ConnectDB(&db.Config{
 		DSN:             cfg.Database.DSN,
@@ -64,7 +75,8 @@ func StartApp(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 
-	v :=validator.NewValidator()
+	v := validator.NewValidator()
+	
 
 	// ==========================================
 	// 2. REPOSITORIES & DATA STORES
@@ -75,7 +87,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	apiKeyRepo := repositories.NewAPIKeyRepository(repo)
 	usrRepo := repositories.NewUserRepository(repo)
-	wspRepo := repositories.NewWorkspaceRepository(repo,db)
+	wspRepo := repositories.NewWorkspaceRepository(repo, db)
+	notifRepo := repositories.NewNotificationRepository(repo)
+	subscriberRepo:=repositories.NewSubscriberRepo(repo)
 
 	// ==========================================
 	// 3. SERVICE LAYER (Business Logic)
@@ -85,32 +99,49 @@ func StartApp(cfg *config.Config) (*App, error) {
 	workspaceService := services.NewWorkSpaceService(wspRepo)
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
+	subscriberSvc:=services.NewSubscriberService(subscriberRepo)
+
+	// ==========================================
+	//  ENGINE CONFIGURATION
+	// ==========================================
+
+	producer := queue.NewProducer(kafkaCfg.Broker)
+
+	render := template.NewRenderer()
+
+	engine := core.NewEngine(notifRepo, producer, appLogger, render)
+
+	setUpProviders(engine)
+
+	consumers:=setUpConsumers(kafkaCfg.Broker,engine,kafkaCfg.GroupID,appLogger)
 
 	// ==========================================
 	// 4. HTTP LAYER (Handlers & Middleware)
 	// ==========================================
 
-	userHandler := handlers.NewUserHandler(userService,appLogger)
+	userHandler := handlers.NewUserHandler(userService, appLogger)
 	wspHandler := handlers.NewWorkspaceHandler(workspaceService)
 	authHandler := handlers.NewAuthHandler(authService, &cfg.Auth, appLogger)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService, appLogger)
+	notifHandler := handlers.NewNotificationHandler(engine, notifRepo, appLogger)
+	subscriberHandler:=handlers.NewSubscriberHandler(subscriberSvc,appLogger)
 
 	// ==========================================
 	// 5. FIBER SETUP & ROUTING
 	// ==========================================
 	app := fiber.New(fiber.Config{
 
-		JSONEncoder:  sonic.Marshal,
-		JSONDecoder:  sonic.Unmarshal,
-		IdleTimeout:  cfg.Server.IdleTimeout,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-		BodyLimit:    10 * 1024 * 1024,
+		JSONEncoder:     sonic.Marshal,
+		JSONDecoder:     sonic.Unmarshal,
+		IdleTimeout:     cfg.Server.IdleTimeout,
+		ReadTimeout:     cfg.Server.ReadTimeout,
+		WriteTimeout:    cfg.Server.WriteTimeout,
+		BodyLimit:       10 * 1024 * 1024,
 		StructValidator: v,
 	})
 	
 
-	authMiddleware := middleware.NewMiddleware(store, &cfg.Auth, appLogger,repo)
+	authMiddleware := middleware.NewMiddleware(store, &cfg.Auth, appLogger, repo)
 	apiKeyMiddleware := middleware.NewApiKeyMiddleware(apiKeyService, appLogger)
 
 	r := RouterDeps{
@@ -121,15 +152,48 @@ func StartApp(cfg *config.Config) (*App, error) {
 		AuthMiddleware:   authMiddleware,
 		ApiKeyHandler:    apiKeyHandler,
 		ApiKeyMiddleware: apiKeyMiddleware,
+		NotifHandler:notifHandler,
+		SubscriberHandler: subscriberHandler,
 	}
 
 	SetUpRoutes(&r)
 
 	return &App{
-		Server: app,
-		Redis:  redis,
-		DB:     db,
-		Logger: appLogger,
+		Server:   app,
+		Redis:    redis,
+		DB:       db,
+		Logger:   appLogger,
+		Producer: producer,
+		Consumer: consumers,
+		Engine: engine,
 	}, nil
 
+}
+
+func setUpProviders(e *core.Engine){
+
+	channels:=[]string{"email","sms","push"}
+
+	for _,val:=range channels{
+		mockProvider:=provider.NewMockProvider(val)
+
+		e.RegisterMockProvider(mockProvider)
+	}
+
+}
+
+func setUpConsumers(broker string, engine *core.Engine,groupID string, log zerolog.Logger)map[string]queue.Consumer{
+
+	consumers:=make(map[string]queue.Consumer)
+
+	topics:=[]string{queue.TopicDLQ,queue.TopicEmail,queue.TopicInApp,queue.TopicRetry,queue.TopicDLQ} 
+
+	for _,topic:=range topics{
+		workerName := topic 
+
+		taggedLogger := log.With().Str("worker_topic", workerName).Logger()
+		consumers[topic]=queue.NewConsumer(broker,topic,groupID,engine.Process,taggedLogger)
+	}
+
+	return  consumers
 }

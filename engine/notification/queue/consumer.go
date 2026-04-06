@@ -11,18 +11,23 @@ import (
 
 type ProcessFunc func(ctx context.Context, event models.NotificationEvent) error
 
+type Consumer interface {
+	Start(ctx context.Context) error
+	Close() error
+}
+
 type consumer struct {
 	reader      *kafka.Reader
 	processFunc ProcessFunc
 	log         zerolog.Logger
 }
 
-func NewConsumer(brokerAddr string, topic string, fn ProcessFunc, log zerolog.Logger) *consumer {
+func NewConsumer(brokerAddr string, topic string,groupID string, fn ProcessFunc, log zerolog.Logger) *consumer {
 	return &consumer{
 		reader: kafka.NewReader(kafka.ReaderConfig{
 			Topic:   topic,
 			Brokers: []string{brokerAddr},
-			GroupID: "notification-engine",
+			GroupID: groupID,
 			
 
 		}),

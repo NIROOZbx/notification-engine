@@ -34,6 +34,7 @@ func (a *apiKeyMiddleware) Authenticate(c fiber.Ctx) error {
 	c.Locals(consts.WID, validatedKey.WorkspaceID)
 	c.Locals(consts.ENVID, validatedKey.EnvID)
 	c.Locals(consts.KEYID, validatedKey.ID)
+	c.Locals(consts.ISTEST,validatedKey.IsTest)
 
 	a.log.Debug().
 		Str("workspaceID", validatedKey.WorkspaceID.String()).

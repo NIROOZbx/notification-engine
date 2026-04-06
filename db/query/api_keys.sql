@@ -12,11 +12,11 @@ VALUES ($1, $2, $3, $4, $5, $6,$7)
 RETURNING *;
 
 -- name: ValidateAndTouchAPIKey :one 
-UPDATE api_keys
-SET last_used_at = NOW()
-WHERE key_hash = $1
-    AND is_revoked = FALSE
-    AND (expires_at IS NULL OR expires_at > NOW())
+    UPDATE api_keys
+    SET last_used_at = NOW()
+    WHERE key_hash = $1
+        AND is_revoked = FALSE
+        AND (expires_at IS NULL OR expires_at > NOW())
 RETURNING id, workspace_id, environment_id, label;
 
 -- name: GetAPIKeyByID :one

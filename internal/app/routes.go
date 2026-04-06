@@ -45,4 +45,13 @@ func SetUpRoutes(r *RouterDeps) {
 	apiKeys.Delete("/:keyID", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.DeleteAPIKey)
 	apiKeys.Patch("/:keyID/revoke", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.RevokeAPIKey)
 
+	engineApi := api.Group("/", r.ApiKeyMiddleware.Authenticate)
+
+	events := engineApi.Group("/events")
+	events.Post("/trigger", r.NotifHandler.Trigger)
+
+	subscribers := engineApi.Group("/subscribers")
+	subscribers.Post("/", r.SubscriberHandler.Identify)
+	subscribers.Post("/preferences", r.SubscriberHandler.UpsertPreference)
+
 }

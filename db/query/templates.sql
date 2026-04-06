@@ -13,3 +13,7 @@ WHERE event_type = $1
   AND status = 'live'
 LIMIT 1;
 
+-- name: GetTemplateByID :one
+SELECT * FROM templates
+WHERE id = $1 AND workspace_id = $2
+LIMIT 1;

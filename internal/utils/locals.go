@@ -38,6 +38,22 @@ func GetRole(c fiber.Ctx)(string, error) {
     return role, nil
 }
 
+func GetEnvID(c fiber.Ctx) (pgtype.UUID, error) {
+    envID, ok := c.Locals(consts.ENVID).(pgtype.UUID)
+    if !ok {
+        return pgtype.UUID{}, errors.New("no environment associated with session")
+    }
+    return envID, nil
+}
+
+func GetIsTest(c fiber.Ctx) bool {
+    isTest, ok := c.Locals(consts.ISTEST).(bool)
+    if !ok {
+        return false // default to false if not present
+    }
+    return isTest
+}
+
 func GetCallerContext(c fiber.Ctx) (CallerContext, error) {
     workspaceID, err := GetWID(c)
     if err != nil {
