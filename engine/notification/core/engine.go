@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/NIROOZbx/notification-engine/consts"
@@ -101,8 +102,8 @@ type ChannelConfig struct {
 }
 
 type Layout struct {
-    ID   string
-    HTML string
+	ID   string
+	HTML string
 }
 
 type Engine struct {
@@ -130,11 +131,12 @@ type Repository interface {
 	GetTemplateChannel(ctx context.Context, templateID, channel string) (*TemplateChannel, error)
 	GetChannelConfigByID(ctx context.Context, channelConfigID, workspaceID string) (*ChannelConfig, error)
 	GetLayoutByID(ctx context.Context, layoutID, workspaceID string) (*Layout, error)
-	GetTemplateByID(ctx context.Context,workspaceID, templateID string) (*Template, error)
+	GetTemplateByID(ctx context.Context, workspaceID, templateID string) (*Template, error)
 }
 
 type Producer interface {
 	Publish(ctx context.Context, topic string, event any) error
+	Close() error
 }
 
 func NewEngine(repo Repository, producer Producer, log zerolog.Logger, render Renderer) *Engine {
@@ -168,18 +170,25 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 	if len(activeChannels) == 0 {
 		return fmt.Errorf("no active channels for template")
 	}
+
+	var finalChannel []TemplateChannel
 	for _, ch := range activeChannels {
 		if _, err := topicByChannel(ch.Channel); err != nil {
 			return fmt.Errorf("configuration error: unsupported channel '%s'", ch.Channel)
 		}
+		if len(payload.Channels) == 0 || slices.Contains(payload.Channels, ch.Channel) {
+            finalChannel = append(finalChannel, ch)
+        }
 	}
 
-	for _, ch := range activeChannels {
+	for _, ch := range finalChannel {
 		l := e.log.With().
 			Str("channel", ch.Channel).
 			Str("event_type", payload.EventType).
 			Str("external_user_id", payload.ExternalUserID).
 			Logger()
+
+		
 
 		channelKey := fmt.Sprintf("%s:%s", payload.IdempotencyKey, ch.Channel)
 		_, err := e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
@@ -278,7 +287,7 @@ func (e *Engine) Process(ctx context.Context, event models.NotificationEvent) er
 		e.updateLogStatus(ctx, notifLogs.ID, "failed")
 		return err
 	}
-	template, err := e.repo.GetTemplateByID(ctx,event.WorkspaceID, templateChannel.TemplateID)
+	template, err := e.repo.GetTemplateByID(ctx, event.WorkspaceID, templateChannel.TemplateID)
 	if err != nil {
 		e.updateLogStatus(ctx, notifLogs.ID, "failed")
 		return err
@@ -408,7 +417,7 @@ func (e *Engine) RegisterProvider(p provider.Provider) {
 }
 
 func (e *Engine) RegisterMockProvider(p provider.Provider) {
-    e.providers["mock:"+p.Channel()] = p
+	e.providers["mock:"+p.Channel()] = p
 }
 
 func (e *Engine) renderContent(templateChannel *TemplateChannel, data map[string]any, p provider.Provider) (map[string]any, error) {
@@ -435,7 +444,7 @@ func (e *Engine) wrapWithLayout(ctx context.Context, rendered map[string]any, la
 	layout, err := e.repo.GetLayoutByID(ctx, layoutID, workspaceID)
 	if err != nil {
 		e.log.Warn().Err(err).Msg("layout not found, sending without layout")
-		return rendered, nil 
+		return rendered, nil
 	}
 
 	wrappedBody, err := e.renderer.Render(layout.HTML, map[string]any{
@@ -492,6 +501,7 @@ func (e *Engine) handleSendFailure(ctx context.Context, notifLog *NotificationLo
 		e.log.Error().Err(err).Msg("failed to publish to Retry queue")
 	}
 }
+
 
 func validatePayload(payload *models.TriggerPayload, e zerolog.Logger) error {
 	if payload == nil {

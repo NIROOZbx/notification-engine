@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"sync"
 
 	"github.com/NIROOZbx/notification-engine/config"
 	"github.com/NIROOZbx/notification-engine/db"
@@ -34,17 +36,18 @@ type App struct {
 	Producer core.Producer
 	Consumer map[string]queue.Consumer
 	Engine   *core.Engine
+	wg       *sync.WaitGroup
 }
 
 type RouterDeps struct {
-	App              *fiber.App
-	AuthHandler      *handlers.AuthHandler
-	UserHandler      *handlers.UserHandler
-	WspHandler       *handlers.WorkspaceHandler
-	AuthMiddleware   middleware.AuthMiddleware
-	ApiKeyHandler    *handlers.APIKeyHandler
-	ApiKeyMiddleware middleware.ApiKeyMiddleware
-	NotifHandler *handlers.NotificationHandler
+	App               *fiber.App
+	AuthHandler       *handlers.AuthHandler
+	UserHandler       *handlers.UserHandler
+	WspHandler        *handlers.WorkspaceHandler
+	AuthMiddleware    middleware.AuthMiddleware
+	ApiKeyHandler     *handlers.APIKeyHandler
+	ApiKeyMiddleware  middleware.ApiKeyMiddleware
+	NotifHandler      *handlers.NotificationHandler
 	SubscriberHandler *handlers.SubscriberHandler
 }
 
@@ -56,7 +59,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	appLogger := logger.NewLogger(&cfg.Log)
 
-	kafkaCfg:=cfg.Kafka
+	kafkaCfg := cfg.Kafka
 
 	db, err := db.ConnectDB(&db.Config{
 		DSN:             cfg.Database.DSN,
@@ -76,7 +79,6 @@ func StartApp(cfg *config.Config) (*App, error) {
 	}
 
 	v := validator.NewValidator()
-	
 
 	// ==========================================
 	// 2. REPOSITORIES & DATA STORES
@@ -89,7 +91,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	usrRepo := repositories.NewUserRepository(repo)
 	wspRepo := repositories.NewWorkspaceRepository(repo, db)
 	notifRepo := repositories.NewNotificationRepository(repo)
-	subscriberRepo:=repositories.NewSubscriberRepo(repo)
+	subscriberRepo := repositories.NewSubscriberRepo(repo)
 
 	// ==========================================
 	// 3. SERVICE LAYER (Business Logic)
@@ -99,7 +101,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	workspaceService := services.NewWorkSpaceService(wspRepo)
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
-	subscriberSvc:=services.NewSubscriberService(subscriberRepo)
+	subscriberSvc := services.NewSubscriberService(subscriberRepo)
 
 	// ==========================================
 	//  ENGINE CONFIGURATION
@@ -113,7 +115,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	setUpProviders(engine)
 
-	consumers:=setUpConsumers(kafkaCfg.Broker,engine,kafkaCfg.GroupID,appLogger)
+	consumers := setUpConsumers(kafkaCfg.Broker, engine, kafkaCfg.GroupID, appLogger)
 
 	// ==========================================
 	// 4. HTTP LAYER (Handlers & Middleware)
@@ -124,7 +126,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	authHandler := handlers.NewAuthHandler(authService, &cfg.Auth, appLogger)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService, appLogger)
 	notifHandler := handlers.NewNotificationHandler(engine, notifRepo, appLogger)
-	subscriberHandler:=handlers.NewSubscriberHandler(subscriberSvc,appLogger)
+	subscriberHandler := handlers.NewSubscriberHandler(subscriberSvc, appLogger)
 
 	// ==========================================
 	// 5. FIBER SETUP & ROUTING
@@ -139,20 +141,19 @@ func StartApp(cfg *config.Config) (*App, error) {
 		BodyLimit:       10 * 1024 * 1024,
 		StructValidator: v,
 	})
-	
 
 	authMiddleware := middleware.NewMiddleware(store, &cfg.Auth, appLogger, repo)
 	apiKeyMiddleware := middleware.NewApiKeyMiddleware(apiKeyService, appLogger)
 
 	r := RouterDeps{
-		App:              app,
-		AuthHandler:      authHandler,
-		WspHandler:       wspHandler,
-		UserHandler:      userHandler,
-		AuthMiddleware:   authMiddleware,
-		ApiKeyHandler:    apiKeyHandler,
-		ApiKeyMiddleware: apiKeyMiddleware,
-		NotifHandler:notifHandler,
+		App:               app,
+		AuthHandler:       authHandler,
+		WspHandler:        wspHandler,
+		UserHandler:       userHandler,
+		AuthMiddleware:    authMiddleware,
+		ApiKeyHandler:     apiKeyHandler,
+		ApiKeyMiddleware:  apiKeyMiddleware,
+		NotifHandler:      notifHandler,
 		SubscriberHandler: subscriberHandler,
 	}
 
@@ -165,35 +166,62 @@ func StartApp(cfg *config.Config) (*App, error) {
 		Logger:   appLogger,
 		Producer: producer,
 		Consumer: consumers,
-		Engine: engine,
+		Engine:   engine,
+		wg:       &sync.WaitGroup{},
 	}, nil
 
 }
 
-func setUpProviders(e *core.Engine){
+func setUpProviders(e *core.Engine) {
 
-	channels:=[]string{"email","sms","push"}
+	channels := []string{"email", "sms", "push"}
 
-	for _,val:=range channels{
-		mockProvider:=provider.NewMockProvider(val)
+	for _, val := range channels {
+		mockProvider := provider.NewMockProvider(val)
 
 		e.RegisterMockProvider(mockProvider)
 	}
 
 }
 
-func setUpConsumers(broker string, engine *core.Engine,groupID string, log zerolog.Logger)map[string]queue.Consumer{
+func setUpConsumers(broker string, engine *core.Engine, groupID string, log zerolog.Logger) map[string]queue.Consumer {
 
-	consumers:=make(map[string]queue.Consumer)
+	consumers := make(map[string]queue.Consumer)
 
-	topics:=[]string{queue.TopicDLQ,queue.TopicEmail,queue.TopicInApp,queue.TopicRetry,queue.TopicDLQ} 
+	topics := []string{queue.TopicDLQ, queue.TopicEmail, queue.TopicInApp, queue.TopicRetry, queue.TopicDLQ}
 
-	for _,topic:=range topics{
-		workerName := topic 
+	for _, topic := range topics {
+		workerName := topic
 
 		taggedLogger := log.With().Str("worker_topic", workerName).Logger()
-		consumers[topic]=queue.NewConsumer(broker,topic,groupID,engine.Process,taggedLogger)
+		consumers[topic] = queue.NewConsumer(broker, topic, groupID, engine.Process, taggedLogger)
 	}
 
-	return  consumers
+	return consumers
+}
+
+func (a *App) StartConsumers(ctx context.Context) {
+	
+
+	for topic, c := range a.Consumer {
+		a.Logger.Info().Str("topic", topic).Msg("consumer started")
+		a.wg.Add(1)
+		go func() {
+
+			defer a.wg.Done()
+			c.Start(ctx)
+		}()
+	}
+}
+
+func (a *App) StopConsumers() {
+	a.Logger.Info().Msg("waiting for consumers to finish their current tasks...")
+	a.wg.Wait()
+
+	for topic, c := range a.Consumer {
+		a.Logger.Info().Str("topic", topic).Msg("closing kafka consumer connection...")
+		if err := c.Close(); err != nil {
+			a.Logger.Error().Err(err).Str("topic", topic).Msg("failed to delicately close consumer")
+		}
+	}
 }

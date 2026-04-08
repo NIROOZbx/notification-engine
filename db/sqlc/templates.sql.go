@@ -11,6 +11,76 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createTemplate = `-- name: CreateTemplate :one
+INSERT INTO templates (
+    workspace_id,
+    environment_id,
+    layout_id,
+    created_by,
+    name,
+    description,
+    event_type,
+    status
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8
+)
+RETURNING id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
+`
+
+type CreateTemplateParams struct {
+	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID `db:"environment_id" json:"environment_id"`
+	LayoutID      pgtype.UUID `db:"layout_id" json:"layout_id"`
+	CreatedBy     pgtype.UUID `db:"created_by" json:"created_by"`
+	Name          string      `db:"name" json:"name"`
+	Description   pgtype.Text `db:"description" json:"description"`
+	EventType     string      `db:"event_type" json:"event_type"`
+	Status        string      `db:"status" json:"status"`
+}
+
+func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) (Template, error) {
+	row := q.db.QueryRow(ctx, createTemplate,
+		arg.WorkspaceID,
+		arg.EnvironmentID,
+		arg.LayoutID,
+		arg.CreatedBy,
+		arg.Name,
+		arg.Description,
+		arg.EventType,
+		arg.Status,
+	)
+	var i Template
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EnvironmentID,
+		&i.LayoutID,
+		&i.CreatedBy,
+		&i.Name,
+		&i.Description,
+		&i.EventType,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteTemplate = `-- name: DeleteTemplate :exec
+DELETE FROM templates
+WHERE id = $1 AND workspace_id = $2
+`
+
+type DeleteTemplateParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) DeleteTemplate(ctx context.Context, arg DeleteTemplateParams) error {
+	_, err := q.db.Exec(ctx, deleteTemplate, arg.ID, arg.WorkspaceID)
+	return err
+}
+
 const getTemplateByEventAndChannel = `-- name: GetTemplateByEventAndChannel :one
 SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at FROM templates 
 WHERE event_type = $1 
@@ -91,6 +161,96 @@ type GetTemplateByIDParams struct {
 
 func (q *Queries) GetTemplateByID(ctx context.Context, arg GetTemplateByIDParams) (Template, error) {
 	row := q.db.QueryRow(ctx, getTemplateByID, arg.ID, arg.WorkspaceID)
+	var i Template
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EnvironmentID,
+		&i.LayoutID,
+		&i.CreatedBy,
+		&i.Name,
+		&i.Description,
+		&i.EventType,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listTemplates = `-- name: ListTemplates :many
+SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at FROM templates
+WHERE workspace_id = $1 AND environment_id = $2
+ORDER BY created_at DESC
+`
+
+type ListTemplatesParams struct {
+	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID `db:"environment_id" json:"environment_id"`
+}
+
+func (q *Queries) ListTemplates(ctx context.Context, arg ListTemplatesParams) ([]Template, error) {
+	rows, err := q.db.Query(ctx, listTemplates, arg.WorkspaceID, arg.EnvironmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Template
+	for rows.Next() {
+		var i Template
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.EnvironmentID,
+			&i.LayoutID,
+			&i.CreatedBy,
+			&i.Name,
+			&i.Description,
+			&i.EventType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateTemplate = `-- name: UpdateTemplate :one
+UPDATE templates
+SET
+    name = $3,
+    description = $4,
+    status = $5,
+    layout_id = $6,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
+`
+
+type UpdateTemplateParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Name        string      `db:"name" json:"name"`
+	Description pgtype.Text `db:"description" json:"description"`
+	Status      string      `db:"status" json:"status"`
+	LayoutID    pgtype.UUID `db:"layout_id" json:"layout_id"`
+}
+
+func (q *Queries) UpdateTemplate(ctx context.Context, arg UpdateTemplateParams) (Template, error) {
+	row := q.db.QueryRow(ctx, updateTemplate,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Description,
+		arg.Status,
+		arg.LayoutID,
+	)
 	var i Template
 	err := row.Scan(
 		&i.ID,

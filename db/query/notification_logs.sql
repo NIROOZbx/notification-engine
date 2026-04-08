@@ -6,12 +6,11 @@ INSERT INTO notification_logs (
     external_user_id,
     event_type,
     channel,
-    status,
     recipient,
     idempotency_key,
     is_test
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9,$10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING *;
 

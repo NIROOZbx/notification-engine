@@ -98,7 +98,7 @@ func (h *AuthHandler) OAuthCallback(c fiber.Ctx) error {
 func (h *AuthHandler) CompleteOnboarding(c fiber.Ctx) error {
 	userID := c.Locals(consts.UID).(pgtype.UUID)
 	var req dtos.OnboardingRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	if err := c.Bind().JSON(&req); err != nil {	
 		h.log.Warn().Err(err).Msg("Invalid request body payload during onboarding")
 		return response.BadRequest(c, nil, "invalid request body")
 	}

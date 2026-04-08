@@ -49,8 +49,8 @@ func (h *SubscriberHandler) Identify(c fiber.Ctx) error {
 	}
 
 	_, err = h.svc.Identify(c.Context(), services.IdentifySubscriberInput{
-		WorkspaceID:    workspaceID.String(),
-		EnvironmentID:  envID.String(),
+		WorkspaceID:    utils.UUIDToString(workspaceID),
+		EnvironmentID:  utils.UUIDToString(envID),
 		ExternalUserID: req.ExternalUserID,
 		Channel:        req.Channel,
 		ContactValue:   req.ContactValue,
@@ -67,10 +67,10 @@ func (h *SubscriberHandler) Identify(c fiber.Ctx) error {
 }
 
 type UpsertPreferenceRequest struct {
-	SubscriberID string `json:"subscriber_id" validate:"required"`
-	Channel      string `json:"channel" validate:"required"`
-	EventType    string `json:"event_type"` // optional
-	IsEnabled    bool   `json:"is_enabled"`
+	ExternalUserID string `json:"external_user_id" validate:"required"`
+	Channel        string `json:"channel"          validate:"required"`
+	EventType      string `json:"event_type"` 
+	IsEnabled      bool   `json:"is_enabled"`
 }
 
 func (h *SubscriberHandler) UpsertPreference(c fiber.Ctx) error {
@@ -89,12 +89,12 @@ func (h *SubscriberHandler) UpsertPreference(c fiber.Ctx) error {
 	}
 
 	_, err = h.svc.UpsertPreference(c.Context(), services.UpsertPreferenceInput{
-		WorkspaceID:   workspaceID.String(),
-		EnvironmentID: envID.String(),
-		SubscriberID:  req.SubscriberID,
-		Channel:       req.Channel,
-		EventType:     req.EventType,
-		IsEnabled:     req.IsEnabled,
+		WorkspaceID:    utils.UUIDToString(workspaceID),
+		EnvironmentID:  utils.UUIDToString(envID),
+		ExternalUserID: req.ExternalUserID,
+		Channel:        req.Channel,
+		EventType:      req.EventType,
+		IsEnabled:      req.IsEnabled,
 	})
 
 	if err != nil {

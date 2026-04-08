@@ -29,6 +29,8 @@ func Run(a *app.App, port string) error {
 		}
 	}()
 
+	a.StartConsumers(ctx)
+
 	select {
 	case err := <-errChan:
 		return err
@@ -52,9 +54,16 @@ func shutdown(a *app.App, ctx context.Context) error {
 		a.Logger.Error().Err(err).Msg("fiber shutdown error")
 	}
 
+	a.StopConsumers()
+
+	if err := a.Producer.Close(); err != nil {
+		a.Logger.Error().Err(err).Msg("kafka producer closing error")
+	}
+
 	if err := a.Redis.Close(); err != nil {
 		a.Logger.Error().Err(err).Msg("redis close error")
 	}
+
 	a.DB.Close()
 
 	a.Logger.Info().Msg("shutdown complete")

@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
+	"github.com/NIROOZbx/notification-engine/internal/models"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
@@ -22,15 +24,15 @@ type IdentifySubscriberInput struct {
 type UpsertPreferenceInput struct {
 	WorkspaceID    string
 	EnvironmentID  string
-	SubscriberID   string
+	ExternalUserID string
 	Channel        string
 	EventType      string
 	IsEnabled      bool
 }
 
 type SubscriberService interface {
-	Identify(ctx context.Context, input IdentifySubscriberInput) (*sqlc.UserInfo, error)
-	UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*sqlc.UserPreference, error)
+	Identify(ctx context.Context, input IdentifySubscriberInput) (*models.Subscriber, error)
+	UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*models.UserPreference, error)
 }
 
 type subscriberService struct {
@@ -41,7 +43,7 @@ func NewSubscriberService(repo repositories.SubscriberRepo) SubscriberService {
 	return &subscriberService{repo: repo}
 }
 
-func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscriberInput) (*sqlc.UserInfo, error) {
+func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscriberInput) (*models.Subscriber, error) {
 	metadataBytes, err := conversion.JSONBFromMap(input.Metadata) 
 	if err != nil {
 		return nil, err
@@ -57,19 +59,25 @@ func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscrib
 		Metadata:       metadataBytes,
 	}
 
-	userInfo, err := s.repo.UpsertSubscriber(ctx, params)
+	subscriber, err := s.repo.UpsertSubscriber(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
-	return &userInfo, nil
+	return subscriber, nil
 }
 
-func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*sqlc.UserPreference, error) {
+func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*models.UserPreference, error) {
+	
+	subscriber, err := s.repo.GetSubscriberByExternalIDAndChannel(ctx, input.WorkspaceID, input.EnvironmentID, input.ExternalUserID, input.Channel)
+	if err != nil {
+		return nil, fmt.Errorf("subscriber not found for channel %s. Please identify them first.", input.Channel)
+	}
+
 	params := sqlc.UpsertUserPreferenceParams{
 		WorkspaceID:   utils.MustStringToUUID(input.WorkspaceID),
 		EnvironmentID: utils.MustStringToUUID(input.EnvironmentID),
-		SubscriberID:  utils.MustStringToUUID(input.SubscriberID),
+		SubscriberID:  utils.MustStringToUUID(subscriber.ID),
 		Channel:       input.Channel,
 		EventType:     helpers.Text(input.EventType),
 		IsEnabled:     input.IsEnabled,
@@ -80,5 +88,6 @@ func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPr
 		return nil, err
 	}
 
-	return &pref, nil
+	pref.ExternalUserID = input.ExternalUserID
+	return pref, nil
 }

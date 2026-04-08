@@ -252,16 +252,14 @@ func mapToDTO(user *sqlc.User, wsp *dtos.WorkspaceResponse, role string) (*dtos.
 		},
 	}
 
-	var workspaceID string
 
 	if wsp != nil {
-		
-		if workspaceID == "" {
-			return nil, fmt.Errorf("missing valid workspace_id %s", workspaceID)
+		if wsp.ID == "" {
+			return nil, fmt.Errorf("missing valid workspace_id in fetched workspace")
 		}
 
 		dto.Workspace = &dtos.WorkSpaceDetails{
-			WorkspaceID:   workspaceID,
+			WorkspaceID:   wsp.ID,
 			WorkSpaceName: wsp.Name,
 			Slug:          wsp.Slug,
 			Role:          role,

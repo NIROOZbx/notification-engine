@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/NIROOZbx/notification-engine/engine/notification/core"
 	"github.com/NIROOZbx/notification-engine/engine/notification/models"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
@@ -28,6 +30,7 @@ type TriggerRequest struct {
 	ExternalUserID string         `json:"external_user_id" validate:"required"`
 	EventType      string         `json:"event_type"       validate:"required"`
 	Data           map[string]any `json:"data"`
+	Channels       []string       `json:"channels"`
 	IdempotencyKey string         `json:"idempotency_key"`
 }
 
@@ -46,6 +49,10 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, nil, "invalid request body")
 	}
+	
+	if err:=channelValidator(&req);err!=nil{
+		return response.BadRequest(c, nil, fmt.Sprintf("invalid channel: %s", err))
+	}
 
 	log := h.log.With().
 		Interface("workspace_id", workspaceID).
@@ -56,6 +63,7 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 		ExternalUserID: req.ExternalUserID,
 		EventType:      req.EventType,
 		Data:           req.Data,
+		Channels:       req.Channels,
 		IdempotencyKey: req.IdempotencyKey,
 		IsTest:         isTest,
 	}
@@ -88,4 +96,22 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 
 	log.Info().Str("event_type", req.EventType).Msg("notification ingested")
 	return response.Accepted(c, "notification queued", nil)
+}
+
+func channelValidator(req *TriggerRequest) error {
+	
+	if len(req.Channels) == 0 {
+		return nil
+	}
+	validChannels := map[string]bool{
+		"email": true, "sms": true, "push": true,
+		"slack": true, "whatsapp": true, "webhook": true, "in_app": true,
+	}
+
+	for _, ch := range req.Channels {
+		if !validChannels[ch] {
+			return fmt.Errorf("invalid channel: %s", ch)
+		}
+	}
+	return nil
 }

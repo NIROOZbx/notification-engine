@@ -11,11 +11,76 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createChannelConfig = `-- name: CreateChannelConfig :one
+INSERT INTO channel_configs (
+    workspace_id,
+    channel,
+    provider,
+    display_name,
+    credentials,
+    is_active,
+    is_default
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+)
+RETURNING id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at
+`
+
+type CreateChannelConfigParams struct {
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Channel     string      `db:"channel" json:"channel"`
+	Provider    string      `db:"provider" json:"provider"`
+	DisplayName pgtype.Text `db:"display_name" json:"display_name"`
+	Credentials []byte      `db:"credentials" json:"credentials"`
+	IsActive    bool        `db:"is_active" json:"is_active"`
+	IsDefault   bool        `db:"is_default" json:"is_default"`
+}
+
+func (q *Queries) CreateChannelConfig(ctx context.Context, arg CreateChannelConfigParams) (ChannelConfig, error) {
+	row := q.db.QueryRow(ctx, createChannelConfig,
+		arg.WorkspaceID,
+		arg.Channel,
+		arg.Provider,
+		arg.DisplayName,
+		arg.Credentials,
+		arg.IsActive,
+		arg.IsDefault,
+	)
+	var i ChannelConfig
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Channel,
+		&i.Provider,
+		&i.DisplayName,
+		&i.Credentials,
+		&i.IsActive,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteChannelConfig = `-- name: DeleteChannelConfig :exec
+DELETE FROM channel_configs
+WHERE id = $1 AND workspace_id = $2
+`
+
+type DeleteChannelConfigParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) DeleteChannelConfig(ctx context.Context, arg DeleteChannelConfigParams) error {
+	_, err := q.db.Exec(ctx, deleteChannelConfig, arg.ID, arg.WorkspaceID)
+	return err
+}
+
 const getChannelConfigByID = `-- name: GetChannelConfigByID :one
 SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at FROM channel_configs
-WHERE id = $1
-AND workspace_id = $2
-AND is_active = true
+WHERE id = $1 AND workspace_id = $2
+LIMIT 1
 `
 
 type GetChannelConfigByIDParams struct {
@@ -25,6 +90,132 @@ type GetChannelConfigByIDParams struct {
 
 func (q *Queries) GetChannelConfigByID(ctx context.Context, arg GetChannelConfigByIDParams) (ChannelConfig, error) {
 	row := q.db.QueryRow(ctx, getChannelConfigByID, arg.ID, arg.WorkspaceID)
+	var i ChannelConfig
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Channel,
+		&i.Provider,
+		&i.DisplayName,
+		&i.Credentials,
+		&i.IsActive,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDefaultChannelConfig = `-- name: GetDefaultChannelConfig :one
+SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at FROM channel_configs
+WHERE workspace_id = $1 AND channel = $2 AND is_default = true
+LIMIT 1
+`
+
+type GetDefaultChannelConfigParams struct {
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Channel     string      `db:"channel" json:"channel"`
+}
+
+func (q *Queries) GetDefaultChannelConfig(ctx context.Context, arg GetDefaultChannelConfigParams) (ChannelConfig, error) {
+	row := q.db.QueryRow(ctx, getDefaultChannelConfig, arg.WorkspaceID, arg.Channel)
+	var i ChannelConfig
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Channel,
+		&i.Provider,
+		&i.DisplayName,
+		&i.Credentials,
+		&i.IsActive,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listChannelConfigs = `-- name: ListChannelConfigs :many
+SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at FROM channel_configs
+WHERE workspace_id = $1
+ORDER BY channel, created_at DESC
+`
+
+func (q *Queries) ListChannelConfigs(ctx context.Context, workspaceID pgtype.UUID) ([]ChannelConfig, error) {
+	rows, err := q.db.Query(ctx, listChannelConfigs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChannelConfig
+	for rows.Next() {
+		var i ChannelConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Channel,
+			&i.Provider,
+			&i.DisplayName,
+			&i.Credentials,
+			&i.IsActive,
+			&i.IsDefault,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setChannelConfigDefault = `-- name: SetChannelConfigDefault :exec
+UPDATE channel_configs
+SET is_default = (id = $1)
+WHERE workspace_id = $2 AND channel = $3
+`
+
+type SetChannelConfigDefaultParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Channel     string      `db:"channel" json:"channel"`
+}
+
+func (q *Queries) SetChannelConfigDefault(ctx context.Context, arg SetChannelConfigDefaultParams) error {
+	_, err := q.db.Exec(ctx, setChannelConfigDefault, arg.ID, arg.WorkspaceID, arg.Channel)
+	return err
+}
+
+const updateChannelConfig = `-- name: UpdateChannelConfig :one
+UPDATE channel_configs
+SET
+    display_name = $3,
+    credentials = $4,
+    is_active = $5,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at
+`
+
+type UpdateChannelConfigParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	DisplayName pgtype.Text `db:"display_name" json:"display_name"`
+	Credentials []byte      `db:"credentials" json:"credentials"`
+	IsActive    bool        `db:"is_active" json:"is_active"`
+}
+
+func (q *Queries) UpdateChannelConfig(ctx context.Context, arg UpdateChannelConfigParams) (ChannelConfig, error) {
+	row := q.db.QueryRow(ctx, updateChannelConfig,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.DisplayName,
+		arg.Credentials,
+		arg.IsActive,
+	)
 	var i ChannelConfig
 	err := row.Scan(
 		&i.ID,

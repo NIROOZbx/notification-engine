@@ -17,3 +17,39 @@ LIMIT 1;
 SELECT * FROM templates
 WHERE id = $1 AND workspace_id = $2
 LIMIT 1;
+
+-- name: ListTemplates :many
+SELECT * FROM templates
+WHERE workspace_id = $1 AND environment_id = $2
+ORDER BY created_at DESC;
+
+-- name: CreateTemplate :one
+INSERT INTO templates (
+    workspace_id,
+    environment_id,
+    layout_id,
+    created_by,
+    name,
+    description,
+    event_type,
+    status
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8
+)
+RETURNING *;
+
+-- name: UpdateTemplate :one
+UPDATE templates
+SET
+    name = $3,
+    description = $4,
+    status = $5,
+    layout_id = $6,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: DeleteTemplate :exec
+DELETE FROM templates
+WHERE id = $1 AND workspace_id = $2;
+

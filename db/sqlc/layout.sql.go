@@ -11,11 +11,85 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createLayout = `-- name: CreateLayout :one
+INSERT INTO layouts (
+    workspace_id,
+    name,
+    html,
+    is_default
+) VALUES (
+    $1, $2, $3, $4
+)
+RETURNING id, workspace_id, name, is_default, html, created_at, updated_at
+`
+
+type CreateLayoutParams struct {
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Name        string      `db:"name" json:"name"`
+	Html        string      `db:"html" json:"html"`
+	IsDefault   bool        `db:"is_default" json:"is_default"`
+}
+
+func (q *Queries) CreateLayout(ctx context.Context, arg CreateLayoutParams) (Layout, error) {
+	row := q.db.QueryRow(ctx, createLayout,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Html,
+		arg.IsDefault,
+	)
+	var i Layout
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.IsDefault,
+		&i.Html,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteLayout = `-- name: DeleteLayout :exec
+DELETE FROM layouts
+WHERE id = $1 AND workspace_id = $2
+`
+
+type DeleteLayoutParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) DeleteLayout(ctx context.Context, arg DeleteLayoutParams) error {
+	_, err := q.db.Exec(ctx, deleteLayout, arg.ID, arg.WorkspaceID)
+	return err
+}
+
+const getDefaultLayout = `-- name: GetDefaultLayout :one
+SELECT id, workspace_id, name, is_default, html, created_at, updated_at FROM layouts
+WHERE workspace_id = $1 AND is_default = true
+LIMIT 1
+`
+
+func (q *Queries) GetDefaultLayout(ctx context.Context, workspaceID pgtype.UUID) (Layout, error) {
+	row := q.db.QueryRow(ctx, getDefaultLayout, workspaceID)
+	var i Layout
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.IsDefault,
+		&i.Html,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLayoutByID = `-- name: GetLayoutByID :one
 SELECT id, workspace_id, name, is_default, html, created_at, updated_at FROM layouts
-WHERE id = $1
-AND workspace_id = $2
-AND is_default=true
+WHERE id = $1 AND workspace_id = $2
+LIMIT 1
 `
 
 type GetLayoutByIDParams struct {
@@ -25,6 +99,93 @@ type GetLayoutByIDParams struct {
 
 func (q *Queries) GetLayoutByID(ctx context.Context, arg GetLayoutByIDParams) (Layout, error) {
 	row := q.db.QueryRow(ctx, getLayoutByID, arg.ID, arg.WorkspaceID)
+	var i Layout
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.IsDefault,
+		&i.Html,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listLayouts = `-- name: ListLayouts :many
+SELECT id, workspace_id, name, is_default, html, created_at, updated_at FROM layouts
+WHERE workspace_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListLayouts(ctx context.Context, workspaceID pgtype.UUID) ([]Layout, error) {
+	rows, err := q.db.Query(ctx, listLayouts, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Layout
+	for rows.Next() {
+		var i Layout
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.IsDefault,
+			&i.Html,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setLayoutDefault = `-- name: SetLayoutDefault :exec
+UPDATE layouts
+SET is_default = (id = $1)
+WHERE workspace_id = $2
+`
+
+type SetLayoutDefaultParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) SetLayoutDefault(ctx context.Context, arg SetLayoutDefaultParams) error {
+	_, err := q.db.Exec(ctx, setLayoutDefault, arg.ID, arg.WorkspaceID)
+	return err
+}
+
+const updateLayout = `-- name: UpdateLayout :one
+UPDATE layouts
+SET
+    name = $3,
+    html = $4,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, name, is_default, html, created_at, updated_at
+`
+
+type UpdateLayoutParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Name        string      `db:"name" json:"name"`
+	Html        string      `db:"html" json:"html"`
+}
+
+func (q *Queries) UpdateLayout(ctx context.Context, arg UpdateLayoutParams) (Layout, error) {
+	row := q.db.QueryRow(ctx, updateLayout,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Html,
+	)
 	var i Layout
 	err := row.Scan(
 		&i.ID,

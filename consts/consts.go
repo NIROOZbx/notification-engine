@@ -7,7 +7,7 @@ const (
 	KEYID="keyID"
 	ISTEST="isTest"
 	Role="role"
-	MaxAttempts = 3
+	MaxAttempts = 5
 
 )
 

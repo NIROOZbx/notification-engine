@@ -1,6 +1,23 @@
 package helpers
 
-import "github.com/jackc/pgx/v5/pgtype"
+import (
+
+
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+func Timestamp(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: !t.IsZero()}
+}
+
+func ToTime(t pgtype.Timestamptz) time.Time {
+	if !t.Valid {
+		return time.Time{}
+	}
+	return t.Time
+}
 
 func Text(s string) pgtype.Text {
 	return pgtype.Text{String: s, Valid: s != ""}

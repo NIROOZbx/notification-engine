@@ -11,6 +11,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createTemplateChannel = `-- name: CreateTemplateChannel :one
+INSERT INTO template_channels (
+    template_id,
+    channel_config_id,
+    channel,
+    content,
+    is_active
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+RETURNING id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
+`
+
+type CreateTemplateChannelParams struct {
+	TemplateID      pgtype.UUID `db:"template_id" json:"template_id"`
+	ChannelConfigID pgtype.UUID `db:"channel_config_id" json:"channel_config_id"`
+	Channel         string      `db:"channel" json:"channel"`
+	Content         []byte      `db:"content" json:"content"`
+	IsActive        pgtype.Bool `db:"is_active" json:"is_active"`
+}
+
+func (q *Queries) CreateTemplateChannel(ctx context.Context, arg CreateTemplateChannelParams) (TemplateChannel, error) {
+	row := q.db.QueryRow(ctx, createTemplateChannel,
+		arg.TemplateID,
+		arg.ChannelConfigID,
+		arg.Channel,
+		arg.Content,
+		arg.IsActive,
+	)
+	var i TemplateChannel
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.ChannelConfigID,
+		&i.Channel,
+		&i.Content,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteTemplateChannel = `-- name: DeleteTemplateChannel :exec
+DELETE FROM template_channels
+WHERE id = $1
+`
+
+func (q *Queries) DeleteTemplateChannel(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTemplateChannel, id)
+	return err
+}
+
 const getActiveChannelsByTemplateID = `-- name: GetActiveChannelsByTemplateID :many
 SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
 WHERE template_id = $1
@@ -46,6 +99,27 @@ func (q *Queries) GetActiveChannelsByTemplateID(ctx context.Context, templateID 
 	return items, nil
 }
 
+const getTemplateChannelByID = `-- name: GetTemplateChannelByID :one
+SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetTemplateChannelByID(ctx context.Context, id pgtype.UUID) (TemplateChannel, error) {
+	row := q.db.QueryRow(ctx, getTemplateChannelByID, id)
+	var i TemplateChannel
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.ChannelConfigID,
+		&i.Channel,
+		&i.Content,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getTemplateChannelByTemplateAndChannel = `-- name: GetTemplateChannelByTemplateAndChannel :one
 SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
 WHERE template_id = $1
@@ -60,6 +134,80 @@ type GetTemplateChannelByTemplateAndChannelParams struct {
 
 func (q *Queries) GetTemplateChannelByTemplateAndChannel(ctx context.Context, arg GetTemplateChannelByTemplateAndChannelParams) (TemplateChannel, error) {
 	row := q.db.QueryRow(ctx, getTemplateChannelByTemplateAndChannel, arg.TemplateID, arg.Channel)
+	var i TemplateChannel
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.ChannelConfigID,
+		&i.Channel,
+		&i.Content,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listTemplateChannels = `-- name: ListTemplateChannels :many
+SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
+WHERE template_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListTemplateChannels(ctx context.Context, templateID pgtype.UUID) ([]TemplateChannel, error) {
+	rows, err := q.db.Query(ctx, listTemplateChannels, templateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TemplateChannel
+	for rows.Next() {
+		var i TemplateChannel
+		if err := rows.Scan(
+			&i.ID,
+			&i.TemplateID,
+			&i.ChannelConfigID,
+			&i.Channel,
+			&i.Content,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateTemplateChannel = `-- name: UpdateTemplateChannel :one
+UPDATE template_channels
+SET
+    channel_config_id = $2,
+    content = $3,
+    is_active = $4,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
+`
+
+type UpdateTemplateChannelParams struct {
+	ID              pgtype.UUID `db:"id" json:"id"`
+	ChannelConfigID pgtype.UUID `db:"channel_config_id" json:"channel_config_id"`
+	Content         []byte      `db:"content" json:"content"`
+	IsActive        pgtype.Bool `db:"is_active" json:"is_active"`
+}
+
+func (q *Queries) UpdateTemplateChannel(ctx context.Context, arg UpdateTemplateChannelParams) (TemplateChannel, error) {
+	row := q.db.QueryRow(ctx, updateTemplateChannel,
+		arg.ID,
+		arg.ChannelConfigID,
+		arg.Content,
+		arg.IsActive,
+	)
 	var i TemplateChannel
 	err := row.Scan(
 		&i.ID,
