@@ -42,4 +42,10 @@ RETURNING *;
 
 -- name: DeleteTemplateChannel :exec
 DELETE FROM template_channels
-WHERE id = $1;
+WHERE id = $1 AND template_id = $2;
+
+-- name: HasActiveChannels :one
+SELECT EXISTS (
+    SELECT 1 FROM template_channels 
+    WHERE template_id = $1 AND is_active = true
+);

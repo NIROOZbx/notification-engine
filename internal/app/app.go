@@ -49,6 +49,7 @@ type RouterDeps struct {
 	ApiKeyMiddleware  middleware.ApiKeyMiddleware
 	NotifHandler      *handlers.NotificationHandler
 	SubscriberHandler *handlers.SubscriberHandler
+	TemplateHandler *handlers.TemplateHandler
 }
 
 func StartApp(cfg *config.Config) (*App, error) {
@@ -92,6 +93,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	wspRepo := repositories.NewWorkspaceRepository(repo, db)
 	notifRepo := repositories.NewNotificationRepository(repo)
 	subscriberRepo := repositories.NewSubscriberRepo(repo)
+	templateRepo:=repositories.NewTemplateRepository(repo)
 
 	// ==========================================
 	// 3. SERVICE LAYER (Business Logic)
@@ -102,6 +104,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
 	subscriberSvc := services.NewSubscriberService(subscriberRepo)
+	templateSvc:=services.NewTemplateService(templateRepo)
 
 	// ==========================================
 	//  ENGINE CONFIGURATION
@@ -127,6 +130,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService, appLogger)
 	notifHandler := handlers.NewNotificationHandler(engine, notifRepo, appLogger)
 	subscriberHandler := handlers.NewSubscriberHandler(subscriberSvc, appLogger)
+	templateHandler:=handlers.NewTemplateHandler(templateSvc,appLogger)
 
 	// ==========================================
 	// 5. FIBER SETUP & ROUTING
@@ -155,6 +159,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 		ApiKeyMiddleware:  apiKeyMiddleware,
 		NotifHandler:      notifHandler,
 		SubscriberHandler: subscriberHandler,
+		TemplateHandler: templateHandler,
 	}
 
 	SetUpRoutes(&r)

@@ -4,15 +4,15 @@ import (
 	"context"
 
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
-	"github.com/NIROOZbx/notification-engine/internal/models"
+	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 )
 
 type SubscriberRepo interface {
-	UpsertSubscriber(ctx context.Context, params sqlc.UpsertUserContactInfoParams) (*models.Subscriber, error)
-	UpsertPreference(ctx context.Context, params sqlc.UpsertUserPreferenceParams) (*models.UserPreference, error)
-	GetSubscriberByExternalIDAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*models.Subscriber, error)
+	UpsertSubscriber(ctx context.Context, params sqlc.UpsertUserContactInfoParams) (*domain.Subscriber, error)
+	UpsertPreference(ctx context.Context, params sqlc.UpsertUserPreferenceParams) (*domain.UserPreference, error)
+	GetSubscriberByExternalIDAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*domain.Subscriber, error)
 }
 
 type subscriberRepo struct {
@@ -23,7 +23,7 @@ func NewSubscriberRepo(db *sqlc.Queries) SubscriberRepo {
 	return &subscriberRepo{db: db}
 }
 
-func (r *subscriberRepo) UpsertSubscriber(ctx context.Context, params sqlc.UpsertUserContactInfoParams) (*models.Subscriber, error) {
+func (r *subscriberRepo) UpsertSubscriber(ctx context.Context, params sqlc.UpsertUserContactInfoParams) (*domain.Subscriber, error) {
 	row, err := r.db.UpsertUserContactInfo(ctx, params)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func (r *subscriberRepo) UpsertSubscriber(ctx context.Context, params sqlc.Upser
 	return mapToSubscriber(row), nil
 }
 
-func (r *subscriberRepo) UpsertPreference(ctx context.Context, params sqlc.UpsertUserPreferenceParams) (*models.UserPreference, error) {
+func (r *subscriberRepo) UpsertPreference(ctx context.Context, params sqlc.UpsertUserPreferenceParams) (*domain.UserPreference, error) {
 	row, err := r.db.UpsertUserPreference(ctx, params)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func (r *subscriberRepo) UpsertPreference(ctx context.Context, params sqlc.Upser
 	return mapToUserPreference(row), nil
 }
 
-func (r *subscriberRepo) GetSubscriberByExternalIDAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*models.Subscriber, error) {
+func (r *subscriberRepo) GetSubscriberByExternalIDAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*domain.Subscriber, error) {
 	row, err := r.db.GetContactByExternalUserAndChannel(ctx, sqlc.GetContactByExternalUserAndChannelParams{
 		WorkspaceID:    utils.MustStringToUUID(workspaceID),
 		EnvironmentID:  utils.MustStringToUUID(envID),
@@ -55,8 +55,8 @@ func (r *subscriberRepo) GetSubscriberByExternalIDAndChannel(ctx context.Context
 	return mapToSubscriber(row), nil
 }
 
-func mapToSubscriber(row sqlc.UserInfo) *models.Subscriber {
-	return &models.Subscriber{
+func mapToSubscriber(row sqlc.UserInfo) *domain.Subscriber {
+	return &domain.Subscriber{
 		ID:             utils.UUIDToString(row.ID),
 		WorkspaceID:    utils.UUIDToString(row.WorkspaceID),
 		EnvironmentID:  utils.UUIDToString(row.EnvironmentID),
@@ -70,8 +70,8 @@ func mapToSubscriber(row sqlc.UserInfo) *models.Subscriber {
 	}
 }
 
-func mapToUserPreference(row sqlc.UserPreference) *models.UserPreference {
-	return &models.UserPreference{
+func mapToUserPreference(row sqlc.UserPreference) *domain.UserPreference {
+	return &domain.UserPreference{
 		ID:           utils.UUIDToString(row.ID),
 		SubscriberID: utils.UUIDToString(row.SubscriberID),
 		Channel:      row.Channel,

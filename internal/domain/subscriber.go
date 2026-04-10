@@ -1,5 +1,4 @@
-package models
-
+package domain
 import "time"
 
 type UserPreference struct {

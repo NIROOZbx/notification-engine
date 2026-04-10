@@ -18,6 +18,8 @@ var (
 	ErrTemplateNotFound = errors.New("template not found")
 	ErrTemplateNotLive  = errors.New("template is not live")
 	ErrNoActiveChannels = errors.New("no active channels for template")
+	ErrReqBody           = errors.New("invalid request body")
+	ErrDependencyFailure = errors.New("cannot delete: resource has dependencies")
 )
 
 type NotFoundError struct {
@@ -50,4 +52,9 @@ func IsUniqueViolation(err error) bool {
 		return pgErr.Code == "23505"
 	}
 	return false
+}
+
+func IsForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }

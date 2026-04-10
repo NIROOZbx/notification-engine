@@ -56,11 +56,16 @@ func (q *Queries) CreateTemplateChannel(ctx context.Context, arg CreateTemplateC
 
 const deleteTemplateChannel = `-- name: DeleteTemplateChannel :exec
 DELETE FROM template_channels
-WHERE id = $1
+WHERE id = $1 AND template_id = $2
 `
 
-func (q *Queries) DeleteTemplateChannel(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteTemplateChannel, id)
+type DeleteTemplateChannelParams struct {
+	ID         pgtype.UUID `db:"id" json:"id"`
+	TemplateID pgtype.UUID `db:"template_id" json:"template_id"`
+}
+
+func (q *Queries) DeleteTemplateChannel(ctx context.Context, arg DeleteTemplateChannelParams) error {
+	_, err := q.db.Exec(ctx, deleteTemplateChannel, arg.ID, arg.TemplateID)
 	return err
 }
 
@@ -146,6 +151,20 @@ func (q *Queries) GetTemplateChannelByTemplateAndChannel(ctx context.Context, ar
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const hasActiveChannels = `-- name: HasActiveChannels :one
+SELECT EXISTS (
+    SELECT 1 FROM template_channels 
+    WHERE template_id = $1 AND is_active = true
+)
+`
+
+func (q *Queries) HasActiveChannels(ctx context.Context, templateID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveChannels, templateID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listTemplateChannels = `-- name: ListTemplateChannels :many

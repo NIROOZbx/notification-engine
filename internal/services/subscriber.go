@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
-	"github.com/NIROOZbx/notification-engine/internal/models"
+	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
@@ -31,8 +31,8 @@ type UpsertPreferenceInput struct {
 }
 
 type SubscriberService interface {
-	Identify(ctx context.Context, input IdentifySubscriberInput) (*models.Subscriber, error)
-	UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*models.UserPreference, error)
+	Identify(ctx context.Context, input IdentifySubscriberInput) (*domain.Subscriber, error)
+	UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*domain.UserPreference, error)
 }
 
 type subscriberService struct {
@@ -43,7 +43,7 @@ func NewSubscriberService(repo repositories.SubscriberRepo) SubscriberService {
 	return &subscriberService{repo: repo}
 }
 
-func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscriberInput) (*models.Subscriber, error) {
+func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscriberInput) (*domain.Subscriber, error) {
 	metadataBytes, err := conversion.JSONBFromMap(input.Metadata) 
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscrib
 	return subscriber, nil
 }
 
-func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*models.UserPreference, error) {
+func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*domain.UserPreference, error) {
 	
 	subscriber, err := s.repo.GetSubscriberByExternalIDAndChannel(ctx, input.WorkspaceID, input.EnvironmentID, input.ExternalUserID, input.Channel)
 	if err != nil {

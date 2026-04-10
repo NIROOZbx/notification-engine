@@ -15,6 +15,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/pkg/response"
 	"github.com/gofiber/fiber/v3"
 	gojwt "github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
 )
 
@@ -56,6 +57,23 @@ func (a *authMiddleware) Auth(c fiber.Ctx) error {
 	if err != nil {
 		return response.InternalServerError(c)
 	}
+	envIDStr := c.Get("X-Environment-ID")
+    if envIDStr != "" {
+        var envID pgtype.UUID
+        if err := envID.Scan(envIDStr); err != nil {
+            return response.BadRequest(c, nil, "invalid environment id")
+        }
+
+        env, err := a.repo.GetEnvironmentByID(c.Context(), envID)
+        if err != nil {
+            return response.Forbidden(c, nil, "invalid environment")
+        }
+        if env.WorkspaceID != workspaceID {
+            return response.Forbidden(c, nil, "environment does not belong to this workspace")
+        }
+
+        c.Locals(consts.ENVID, envID)
+    }
 
 	c.Locals(consts.UID, userID)
 	c.Locals(consts.WID, workspaceID)

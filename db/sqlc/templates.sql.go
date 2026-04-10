@@ -19,10 +19,9 @@ INSERT INTO templates (
     created_by,
     name,
     description,
-    event_type,
-    status
+    event_type
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7
 )
 RETURNING id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
 `
@@ -35,7 +34,6 @@ type CreateTemplateParams struct {
 	Name          string      `db:"name" json:"name"`
 	Description   pgtype.Text `db:"description" json:"description"`
 	EventType     string      `db:"event_type" json:"event_type"`
-	Status        string      `db:"status" json:"status"`
 }
 
 func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) (Template, error) {
@@ -47,7 +45,6 @@ func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) 
 		arg.Name,
 		arg.Description,
 		arg.EventType,
-		arg.Status,
 	)
 	var i Template
 	err := row.Scan(

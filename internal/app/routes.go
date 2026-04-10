@@ -32,11 +32,23 @@ func SetUpRoutes(r *RouterDeps) {
 	workspaces.Get("/current", r.WspHandler.GetCurrentWorkspace)
 	workspaces.Patch("/current", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateName)
 
-	members := workspaces.Group("/current/members")
-    members.Get("/", r.WspHandler.GetWorkspaceMembers)
-	members.Patch("/:userID/role",r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
-	members.Delete("/:userID",r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
+	//templates
+	workspaces.Get("/current/templates", r.TemplateHandler.List)
+	workspaces.Post("/current/templates", r.TemplateHandler.Create)
+	workspaces.Get("/current/templates/:templateID", r.TemplateHandler.GetByID)
+	workspaces.Patch("/current/templates/:templateID", r.TemplateHandler.Update)
+	workspaces.Delete("/current/templates/:templateID", r.TemplateHandler.Delete)
 
+	//templateChannel
+	workspaces.Post("/current/templates/:templateID/channels", r.TemplateHandler.CreateChannel)
+	workspaces.Get("/current/templates/:templateID/channels", r.TemplateHandler.ListChannels)
+	workspaces.Patch("/current/templates/:templateID/channels/:channelID", r.TemplateHandler.UpdateChannel)
+	workspaces.Delete("/current/templates/:templateID/channels/:channelID", r.TemplateHandler.DeleteChannel)
+
+	members := workspaces.Group("/current/members")
+	members.Get("/", r.WspHandler.GetWorkspaceMembers)
+	members.Patch("/:userID/role", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
+	members.Delete("/:userID", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
 
 	apiKeys := api.Group("/workspaces/current/api-keys")
 
@@ -45,12 +57,10 @@ func SetUpRoutes(r *RouterDeps) {
 	apiKeys.Delete("/:keyID", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.DeleteAPIKey)
 	apiKeys.Patch("/:keyID/revoke", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.RevokeAPIKey)
 
-	engineApi := api.Group("/", r.ApiKeyMiddleware.Authenticate)
-
-	events := engineApi.Group("/events")
+	events := api.Group("/events", r.ApiKeyMiddleware.Authenticate)
 	events.Post("/trigger", r.NotifHandler.Trigger)
 
-	subscribers := engineApi.Group("/identify")
+	subscribers := api.Group("/identify", r.ApiKeyMiddleware.Authenticate)
 	subscribers.Post("/", r.SubscriberHandler.Identify)
 	subscribers.Post("/preferences", r.SubscriberHandler.UpsertPreference)
 

@@ -73,3 +73,29 @@ func GetCallerContext(c fiber.Ctx) (CallerContext, error) {
         CallerRole:  role,
     }, nil
 }
+
+type AuthContext struct {
+    WorkspaceID pgtype.UUID
+    EnvID       pgtype.UUID
+    UserID      pgtype.UUID
+}
+
+func GetAuthContext(c fiber.Ctx) (*AuthContext, error) {
+    workspaceID, err := GetWID(c)
+    if err != nil {
+        return nil, err
+    }
+    envID, err := GetEnvID(c)
+    if err != nil {
+        return nil, err
+    }
+    userID, err := GetUID(c)
+    if err != nil {
+        return nil, err
+    }
+    return &AuthContext{
+        WorkspaceID: workspaceID,
+        EnvID:       envID,
+        UserID:      userID,
+    }, nil
+}

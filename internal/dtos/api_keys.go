@@ -31,7 +31,6 @@ type RevokedKeyInfo struct{
 }
 
 type CreateAPIKeyRequest struct {
-    EnvironmentID string `json:"environment_id" validate:"required,uuid4"`
     Label         string `json:"label" validate:"required,min=3,max=50"`
     ExpiresIn     int    `json:"expires_in" validate:"required,min=1"`
 }
