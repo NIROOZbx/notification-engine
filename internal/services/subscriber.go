@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
@@ -44,6 +45,10 @@ func NewSubscriberService(repo repositories.SubscriberRepo) SubscriberService {
 }
 
 func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscriberInput) (*domain.Subscriber, error) {
+	if !consts.ValidChannels[input.Channel] {
+		return nil, fmt.Errorf("invalid channel: %s", input.Channel)
+	}
+
 	metadataBytes, err := conversion.JSONBFromMap(input.Metadata) 
 	if err != nil {
 		return nil, err
@@ -68,7 +73,10 @@ func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscrib
 }
 
 func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*domain.UserPreference, error) {
-	
+	if !consts.ValidChannels[input.Channel] {
+		return nil, fmt.Errorf("invalid channel: %s", input.Channel)
+	}
+
 	subscriber, err := s.repo.GetSubscriberByExternalIDAndChannel(ctx, input.WorkspaceID, input.EnvironmentID, input.ExternalUserID, input.Channel)
 	if err != nil {
 		return nil, fmt.Errorf("subscriber not found for channel %s. Please identify them first.", input.Channel)

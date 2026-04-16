@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveProvidersForChannel = `-- name: CountActiveProvidersForChannel :one
+SELECT COUNT(*) FROM channel_configs 
+WHERE workspace_id = $1 AND channel = $2 AND deleted_at IS NULL
+`
+
+type CountActiveProvidersForChannelParams struct {
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Channel     string      `db:"channel" json:"channel"`
+}
+
+func (q *Queries) CountActiveProvidersForChannel(ctx context.Context, arg CountActiveProvidersForChannelParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveProvidersForChannel, arg.WorkspaceID, arg.Channel)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createChannelConfig = `-- name: CreateChannelConfig :one
 INSERT INTO channel_configs (
     workspace_id,
@@ -23,7 +40,7 @@ INSERT INTO channel_configs (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
 )
-RETURNING id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at
+RETURNING id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at, deleted_at
 `
 
 type CreateChannelConfigParams struct {
@@ -31,7 +48,7 @@ type CreateChannelConfigParams struct {
 	Channel     string      `db:"channel" json:"channel"`
 	Provider    string      `db:"provider" json:"provider"`
 	DisplayName pgtype.Text `db:"display_name" json:"display_name"`
-	Credentials []byte      `db:"credentials" json:"credentials"`
+	Credentials string      `db:"credentials" json:"credentials"`
 	IsActive    bool        `db:"is_active" json:"is_active"`
 	IsDefault   bool        `db:"is_default" json:"is_default"`
 }
@@ -58,29 +75,14 @@ func (q *Queries) CreateChannelConfig(ctx context.Context, arg CreateChannelConf
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
-const deleteChannelConfig = `-- name: DeleteChannelConfig :exec
-DELETE FROM channel_configs
-WHERE id = $1 AND workspace_id = $2
-`
-
-type DeleteChannelConfigParams struct {
-	ID          pgtype.UUID `db:"id" json:"id"`
-	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
-}
-
-func (q *Queries) DeleteChannelConfig(ctx context.Context, arg DeleteChannelConfigParams) error {
-	_, err := q.db.Exec(ctx, deleteChannelConfig, arg.ID, arg.WorkspaceID)
-	return err
-}
-
 const getChannelConfigByID = `-- name: GetChannelConfigByID :one
-SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at FROM channel_configs
-WHERE id = $1 AND workspace_id = $2
-LIMIT 1
+SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at, deleted_at FROM channel_configs 
+WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
 `
 
 type GetChannelConfigByIDParams struct {
@@ -102,13 +104,44 @@ func (q *Queries) GetChannelConfigByID(ctx context.Context, arg GetChannelConfig
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getChannelConfigByIDAndWorkspace = `-- name: GetChannelConfigByIDAndWorkspace :one
+
+SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at, deleted_at FROM channel_configs
+WHERE id=$1 and workspace_id =$2
+`
+
+type GetChannelConfigByIDAndWorkspaceParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) GetChannelConfigByIDAndWorkspace(ctx context.Context, arg GetChannelConfigByIDAndWorkspaceParams) (ChannelConfig, error) {
+	row := q.db.QueryRow(ctx, getChannelConfigByIDAndWorkspace, arg.ID, arg.WorkspaceID)
+	var i ChannelConfig
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Channel,
+		&i.Provider,
+		&i.DisplayName,
+		&i.Credentials,
+		&i.IsActive,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getDefaultChannelConfig = `-- name: GetDefaultChannelConfig :one
-SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at FROM channel_configs
-WHERE workspace_id = $1 AND channel = $2 AND is_default = true
+SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at, deleted_at FROM channel_configs
+WHERE workspace_id = $1 AND channel = $2 AND is_default = true AND deleted_at IS NULL
 LIMIT 1
 `
 
@@ -131,13 +164,43 @@ func (q *Queries) GetDefaultChannelConfig(ctx context.Context, arg GetDefaultCha
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getProviderForWorker = `-- name: GetProviderForWorker :one
+SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at, deleted_at FROM channel_configs 
+WHERE id = $1 AND workspace_id = $2
+`
+
+type GetProviderForWorkerParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) GetProviderForWorker(ctx context.Context, arg GetProviderForWorkerParams) (ChannelConfig, error) {
+	row := q.db.QueryRow(ctx, getProviderForWorker, arg.ID, arg.WorkspaceID)
+	var i ChannelConfig
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Channel,
+		&i.Provider,
+		&i.DisplayName,
+		&i.Credentials,
+		&i.IsActive,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listChannelConfigs = `-- name: ListChannelConfigs :many
-SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at FROM channel_configs
-WHERE workspace_id = $1
+SELECT id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at, deleted_at FROM channel_configs
+WHERE workspace_id = $1 AND deleted_at IS NULL
 ORDER BY channel, created_at DESC
 `
 
@@ -161,6 +224,7 @@ func (q *Queries) ListChannelConfigs(ctx context.Context, workspaceID pgtype.UUI
 			&i.IsDefault,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -172,10 +236,27 @@ func (q *Queries) ListChannelConfigs(ctx context.Context, workspaceID pgtype.UUI
 	return items, nil
 }
 
+const removeProviderOverride = `-- name: RemoveProviderOverride :exec
+UPDATE template_channels tc
+SET channel_config_id = NULL 
+from templates t WHERE tc.template_id=t.id and tc.channel_config_id=$1
+and t.workspace_id=$2
+`
+
+type RemoveProviderOverrideParams struct {
+	ChannelConfigID pgtype.UUID `db:"channel_config_id" json:"channel_config_id"`
+	WorkspaceID     pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) RemoveProviderOverride(ctx context.Context, arg RemoveProviderOverrideParams) error {
+	_, err := q.db.Exec(ctx, removeProviderOverride, arg.ChannelConfigID, arg.WorkspaceID)
+	return err
+}
+
 const setChannelConfigDefault = `-- name: SetChannelConfigDefault :exec
 UPDATE channel_configs
 SET is_default = (id = $1)
-WHERE workspace_id = $2 AND channel = $3
+WHERE workspace_id = $2 AND channel = $3 AND deleted_at IS NULL
 `
 
 type SetChannelConfigDefaultParams struct {
@@ -189,23 +270,42 @@ func (q *Queries) SetChannelConfigDefault(ctx context.Context, arg SetChannelCon
 	return err
 }
 
+const softDeleteChannelConfig = `-- name: SoftDeleteChannelConfig :exec
+UPDATE channel_configs 
+SET 
+    deleted_at = NOW(),
+    is_active = false,
+    is_default = false 
+WHERE id = $1 AND workspace_id = $2
+`
+
+type SoftDeleteChannelConfigParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) SoftDeleteChannelConfig(ctx context.Context, arg SoftDeleteChannelConfigParams) error {
+	_, err := q.db.Exec(ctx, softDeleteChannelConfig, arg.ID, arg.WorkspaceID)
+	return err
+}
+
 const updateChannelConfig = `-- name: UpdateChannelConfig :one
 UPDATE channel_configs
 SET
-    display_name = $3,
-    credentials = $4,
-    is_active = $5,
+    display_name = COALESCE($3, display_name),
+    credentials  = COALESCE($4, credentials),
+    is_active    = COALESCE($5, is_active),
     updated_at = NOW()
-WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at
+WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+RETURNING id, workspace_id, channel, provider, display_name, credentials, is_active, is_default, created_at, updated_at, deleted_at
 `
 
 type UpdateChannelConfigParams struct {
 	ID          pgtype.UUID `db:"id" json:"id"`
 	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
 	DisplayName pgtype.Text `db:"display_name" json:"display_name"`
-	Credentials []byte      `db:"credentials" json:"credentials"`
-	IsActive    bool        `db:"is_active" json:"is_active"`
+	Credentials pgtype.Text `db:"credentials" json:"credentials"`
+	IsActive    pgtype.Bool `db:"is_active" json:"is_active"`
 }
 
 func (q *Queries) UpdateChannelConfig(ctx context.Context, arg UpdateChannelConfigParams) (ChannelConfig, error) {
@@ -228,6 +328,7 @@ func (q *Queries) UpdateChannelConfig(ctx context.Context, arg UpdateChannelConf
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

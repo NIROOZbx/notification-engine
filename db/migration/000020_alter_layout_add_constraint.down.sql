@@ -1,0 +1,2 @@
+ALTER TABLE layouts
+DROP CONSTRAINT layouts_workspace_id_name_key;

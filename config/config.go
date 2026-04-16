@@ -66,13 +66,14 @@ type KafkaConfig struct {
 }
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Log      LogConfig      `mapstructure:"log"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Auth     AuthConfig     `mapstructure:"auth"`
-	OAuth    OAuthConfig    `mapstructure:"oauth"`
-	Kafka    KafkaConfig    `mapstructure:"kafka"`
+	Server    ServerConfig   `mapstructure:"server"`
+	Log       LogConfig      `mapstructure:"log"`
+	Database  DatabaseConfig `mapstructure:"database"`
+	Redis     RedisConfig    `mapstructure:"redis"`
+	Auth      AuthConfig     `mapstructure:"auth"`
+	OAuth     OAuthConfig    `mapstructure:"oauth"`
+	Kafka     KafkaConfig    `mapstructure:"kafka"`
+	SecretKey string         `mapstructure:"secret_key"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -108,6 +109,8 @@ func LoadConfig() (*Config, error) {
 
 	v.BindEnv("kafka.broker", "KAFKA_BROKER")
 	v.BindEnv("kafka.group_id", "KAFKA_GROUP_ID")
+
+	v.BindEnv("secret_key", "CREDENTIALS_SECRET")
 	var cfg Config
 
 	if err := v.Unmarshal(&cfg); err != nil {
@@ -144,6 +147,7 @@ func validate(cfg *Config) {
 		{cfg.OAuth.ClientSecret, "CLIENT_SECRET"},
 		{cfg.OAuth.RedirectURL, "REDIRECT_URL"},
 		{cfg.Kafka.Broker, "KAFKA_BROKER"},
+		{cfg.SecretKey, "CREDENTIALS_SECRET"},
 	}
 
 	for _, rule := range rules {

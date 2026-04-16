@@ -26,8 +26,8 @@ type TemplateRepository interface {
 	Delete(ctx context.Context, id, workspaceID pgtype.UUID) error
 	HasActiveChannels(ctx context.Context, templateID pgtype.UUID) (bool, error)
 
-
 	CreateChannel(ctx context.Context, params domain.CreateTemplateChannelParams) (*domain.TemplateChannel, error)
+	GetChannelByID(ctx context.Context, id pgtype.UUID) (*domain.TemplateChannel, error)
 	ListChannels(ctx context.Context, templateID pgtype.UUID) ([]*domain.TemplateChannel, error)
 	UpdateChannel(ctx context.Context, params domain.UpdateTemplateChannelParams) (*domain.TemplateChannel, error)
 	DeleteChannel(ctx context.Context, id, templateID pgtype.UUID) error
@@ -49,11 +49,11 @@ func (r *templateRepository) Create(ctx context.Context, params domain.CreateTem
 	})
 	if err != nil {
 		if apperrors.IsUniqueViolation(err) {
-            return nil, apperrors.ErrAlreadyExists
-        }
+			return nil, apperrors.ErrAlreadyExists
+		}
 		if apperrors.IsForeignKeyViolation(err) {
-             return nil, fmt.Errorf("%w: invalid layout or user reference", apperrors.ErrInvalidInput)
-        }
+			return nil, fmt.Errorf("%w: invalid layout or user reference", apperrors.ErrInvalidInput)
+		}
 		return nil, fmt.Errorf("create template: %w", err)
 	}
 	return toTemplate(row), nil
@@ -65,11 +65,11 @@ func (r *templateRepository) GetByID(ctx context.Context, id, workspaceID pgtype
 		WorkspaceID: workspaceID,
 	})
 	if err != nil {
-        if errors.Is(err, pgx.ErrNoRows) {
-            return nil, apperrors.ErrTemplateNotFound
-        }
-        return nil, fmt.Errorf("get template: %w", err)
-    }
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.ErrTemplateNotFound
+		}
+		return nil, fmt.Errorf("get template: %w", err)
+	}
 	return toTemplate(row), nil
 }
 
@@ -132,11 +132,11 @@ func (r *templateRepository) Delete(ctx context.Context, id, workspaceID pgtype.
 		WorkspaceID: workspaceID,
 	})
 	if err != nil {
-        if apperrors.IsForeignKeyViolation(err) {
-            return fmt.Errorf("%w: template is in use by channels", apperrors.ErrDependencyFailure)
-        }
-        return fmt.Errorf("db delete: %w", err)
-    }
+		if apperrors.IsForeignKeyViolation(err) {
+			return fmt.Errorf("%w: template is in use by channels", apperrors.ErrDependencyFailure)
+		}
+		return fmt.Errorf("db delete: %w", err)
+	}
 	return nil
 }
 
@@ -155,7 +155,7 @@ func (r *templateRepository) CreateChannel(ctx context.Context, params domain.Cr
 	if err != nil {
 		return nil, fmt.Errorf("marshal content: %w", err)
 	}
-	
+
 	row, err := r.queries.CreateTemplateChannel(ctx, sqlc.CreateTemplateChannelParams{
 		TemplateID:      params.TemplateID,
 		ChannelConfigID: params.ChannelConfigID,
@@ -168,6 +168,17 @@ func (r *templateRepository) CreateChannel(ctx context.Context, params domain.Cr
 			return nil, apperrors.ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("create template channel: %w", err)
+	}
+	return toTemplateChannel(row), nil
+}
+
+func (r *templateRepository) GetChannelByID(ctx context.Context, id pgtype.UUID) (*domain.TemplateChannel, error) {
+	row, err := r.queries.GetTemplateChannelByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.ErrNotFound
+		}
+		return nil, fmt.Errorf("get channel: %w", err)
 	}
 	return toTemplateChannel(row), nil
 }
@@ -193,16 +204,35 @@ func (r *templateRepository) UpdateChannel(ctx context.Context, params domain.Up
 		return nil, fmt.Errorf("template channel not found: %w", err)
 	}
 
-	content, err := sonic.Marshal(params.Content)
-	if err != nil {
-		return nil, fmt.Errorf("marshal content: %w", err)
-	}
-
 	updateParams := sqlc.UpdateTemplateChannelParams{
 		ID:              params.ID,
 		ChannelConfigID: current.ChannelConfigID,
-		Content:         content,
+		Content:         current.Content,
 		IsActive:        current.IsActive,
+	}
+
+	if params.Content != nil {
+		content, err := sonic.Marshal(params.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal content: %w", err)
+		}
+		updateParams.Content = content
+	}
+
+	if params.ChannelConfigID != nil && params.ChannelConfigID.Valid {
+		config, err := r.queries.GetChannelConfigByIDAndWorkspace(ctx, sqlc.GetChannelConfigByIDAndWorkspaceParams{
+			ID:          *params.ChannelConfigID,
+			WorkspaceID: params.WorkspaceID,
+		})
+		if err != nil {
+			return nil, apperrors.ErrForbidden
+		}
+
+		if config.Channel != current.Channel {
+			return nil, fmt.Errorf("%w: channel config type mismatch", apperrors.ErrInvalidInput)
+		}
+
+		updateParams.ChannelConfigID = *params.ChannelConfigID
 	}
 
 	if params.IsActive != nil {
@@ -220,13 +250,19 @@ func (r *templateRepository) UpdateChannel(ctx context.Context, params domain.Up
 }
 
 func (r *templateRepository) DeleteChannel(ctx context.Context, id, templateID pgtype.UUID) error {
-	err := r.queries.DeleteTemplateChannel(ctx, sqlc.DeleteTemplateChannelParams{
+	result,err := r.queries.DeleteTemplateChannel(ctx, sqlc.DeleteTemplateChannelParams{
 		ID:         id,
 		TemplateID: templateID,
 	})
 	if err != nil {
 		return fmt.Errorf("delete template channel: %w", err)
 	}
+
+	if result.RowsAffected()==0{
+		 return apperrors.ErrNotFound 
+	}
+
+	
 	return nil
 }
 

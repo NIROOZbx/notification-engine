@@ -1,20 +1,31 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/rs/zerolog"
+)
 
 type mockProvider struct {
 	channel string
+	log zerolog.Logger
 }
 
-func NewMockProvider(ch string) *mockProvider {
+func NewMockProvider(ch string,log zerolog.Logger) *mockProvider {
 	return &mockProvider{
 		channel: ch,
+		log: log,
 	}
 
 }
 
 func (m *mockProvider) Send(ctx context.Context,msg Message)error{
-return nil
+    m.log.Info().
+        Str("to", msg.To).
+        Interface("subject", msg.Content["subject"]).
+        Interface("body", msg.Content["body"]).
+        Msg("[MOCK] email sent")
+    return nil
 }
 
 func(m *mockProvider)Name()string{

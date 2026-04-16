@@ -41,3 +41,4 @@ WHERE id = $1 AND workspace_id = $2;
 UPDATE layouts
 SET is_default = (id = $1)
 WHERE workspace_id = $2;
+

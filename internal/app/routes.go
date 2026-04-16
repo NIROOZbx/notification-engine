@@ -28,29 +28,46 @@ func SetUpRoutes(r *RouterDeps) {
 	users := api.Group("/users", r.AuthMiddleware.Auth)
 	users.Get("/me", r.UserHandler.GetMe)
 
-	workspaces := api.Group("/workspaces", r.AuthMiddleware.Auth)
-	workspaces.Get("/current", r.WspHandler.GetCurrentWorkspace)
-	workspaces.Patch("/current", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateName)
+	current := api.Group("/workspaces/current", r.AuthMiddleware.Auth)
 
-	//templates
-	workspaces.Get("/current/templates", r.TemplateHandler.List)
-	workspaces.Post("/current/templates", r.TemplateHandler.Create)
-	workspaces.Get("/current/templates/:templateID", r.TemplateHandler.GetByID)
-	workspaces.Patch("/current/templates/:templateID", r.TemplateHandler.Update)
-	workspaces.Delete("/current/templates/:templateID", r.TemplateHandler.Delete)
+	current.Get("/", r.WspHandler.GetCurrentWorkspace)
+	current.Patch("/", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateName)
 
-	//templateChannel
-	workspaces.Post("/current/templates/:templateID/channels", r.TemplateHandler.CreateChannel)
-	workspaces.Get("/current/templates/:templateID/channels", r.TemplateHandler.ListChannels)
-	workspaces.Patch("/current/templates/:templateID/channels/:channelID", r.TemplateHandler.UpdateChannel)
-	workspaces.Delete("/current/templates/:templateID/channels/:channelID", r.TemplateHandler.DeleteChannel)
+	// templates
+	current.Get("/templates", r.TemplateHandler.List)
+	current.Post("/templates", r.TemplateHandler.Create)
+	current.Get("/templates/:templateID", r.TemplateHandler.GetByID)
+	current.Patch("/templates/:templateID", r.TemplateHandler.Update)
+	current.Delete("/templates/:templateID", r.TemplateHandler.Delete)
 
-	members := workspaces.Group("/current/members")
-	members.Get("/", r.WspHandler.GetWorkspaceMembers)
-	members.Patch("/:userID/role", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
-	members.Delete("/:userID", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
+	// template channels
+	current.Post("/templates/:templateID/channels", r.TemplateHandler.CreateChannel)
+	current.Get("/templates/:templateID/channels", r.TemplateHandler.ListChannels)
+	current.Patch("/templates/:templateID/channels/:channelID", r.TemplateHandler.UpdateChannel)
+	current.Delete("/templates/:templateID/channels/:channelID", r.TemplateHandler.DeleteChannel)
 
-	apiKeys := api.Group("/workspaces/current/api-keys")
+	// layouts
+	current.Get("/layouts", r.LayoutHandler.List)
+	current.Post("/layouts", r.LayoutHandler.Create)
+	current.Get("/layouts/:id", r.LayoutHandler.GetByID)
+	current.Patch("/layouts/:id", r.LayoutHandler.Update)
+	current.Delete("/layouts/:id", r.LayoutHandler.Delete)
+	current.Patch("/layouts/:id/default", r.LayoutHandler.SetDefault)
+	
+	// channel configs
+	current.Get("/channels", r.ChnlConfigHandler.List)
+	current.Post("/channels", r.ChnlConfigHandler.Create)
+	current.Get("/channels/:id", r.ChnlConfigHandler.GetByID)
+	current.Patch("/channels/:id", r.ChnlConfigHandler.Update)
+	current.Delete("/channels/:id", r.ChnlConfigHandler.Delete)
+	current.Patch("/channels/:id/default", r.ChnlConfigHandler.SetDefault)
+
+	// members
+	current.Get("/members", r.WspHandler.GetWorkspaceMembers)
+	current.Patch("/members/:userID/role", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
+	current.Delete("/members/:userID", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
+
+	apiKeys := current.Group("/api-keys")
 
 	apiKeys.Get("/", r.ApiKeyHandler.ListAPIKeys)
 	apiKeys.Post("/", r.AuthMiddleware.RequireRole("owner", "admin"), r.ApiKeyHandler.CreateAPIKey)

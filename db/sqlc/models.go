@@ -30,11 +30,12 @@ type ChannelConfig struct {
 	Channel     string             `db:"channel" json:"channel"`
 	Provider    string             `db:"provider" json:"provider"`
 	DisplayName pgtype.Text        `db:"display_name" json:"display_name"`
-	Credentials []byte             `db:"credentials" json:"credentials"`
+	Credentials string             `db:"credentials" json:"credentials"`
 	IsActive    bool               `db:"is_active" json:"is_active"`
 	IsDefault   bool               `db:"is_default" json:"is_default"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
 }
 
 type Environment struct {

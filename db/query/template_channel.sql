@@ -40,7 +40,7 @@ SET
 WHERE id = $1
 RETURNING *;
 
--- name: DeleteTemplateChannel :exec
+-- name: DeleteTemplateChannel :execresult
 DELETE FROM template_channels
 WHERE id = $1 AND template_id = $2;
 

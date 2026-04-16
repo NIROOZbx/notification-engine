@@ -162,16 +162,12 @@ func (r *notificationRepository) GetChannelConfigByID(ctx context.Context, chann
 		return nil, fmt.Errorf("failed to get channel config: %w", err)
 	}
 
-	creds, err := conversion.MapFromJSONB(row.Credentials)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
-	}
-
 	return &core.ChannelConfig{
 		ID:          utils.UUIDToString(row.ID),
 		Channel:     row.Channel,
 		Provider:    row.Provider,
-		Credentials: creds,
+		Encrypted:   row.Credentials,
+		Credentials: nil,           
 	}, nil
 }
 

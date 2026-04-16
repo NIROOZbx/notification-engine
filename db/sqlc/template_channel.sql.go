@@ -8,6 +8,7 @@ package sqlc
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -54,7 +55,7 @@ func (q *Queries) CreateTemplateChannel(ctx context.Context, arg CreateTemplateC
 	return i, err
 }
 
-const deleteTemplateChannel = `-- name: DeleteTemplateChannel :exec
+const deleteTemplateChannel = `-- name: DeleteTemplateChannel :execresult
 DELETE FROM template_channels
 WHERE id = $1 AND template_id = $2
 `
@@ -64,9 +65,8 @@ type DeleteTemplateChannelParams struct {
 	TemplateID pgtype.UUID `db:"template_id" json:"template_id"`
 }
 
-func (q *Queries) DeleteTemplateChannel(ctx context.Context, arg DeleteTemplateChannelParams) error {
-	_, err := q.db.Exec(ctx, deleteTemplateChannel, arg.ID, arg.TemplateID)
-	return err
+func (q *Queries) DeleteTemplateChannel(ctx context.Context, arg DeleteTemplateChannelParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, deleteTemplateChannel, arg.ID, arg.TemplateID)
 }
 
 const getActiveChannelsByTemplateID = `-- name: GetActiveChannelsByTemplateID :many

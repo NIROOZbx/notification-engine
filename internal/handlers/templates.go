@@ -1,12 +1,11 @@
 package handlers
 
 import (
-	"errors"
-
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/services"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
+	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/response"
 	"github.com/bytedance/sonic"
@@ -45,7 +44,7 @@ func (h *TemplateHandler) Create(c fiber.Ctx) error {
 		}
 		layoutID = parsedID
 	}
-	
+
 	params := domain.CreateTemplateParams{
 		WorkspaceID:   authContext.WorkspaceID,
 		EnvironmentID: authContext.EnvID,
@@ -59,14 +58,7 @@ func (h *TemplateHandler) Create(c fiber.Ctx) error {
 	t, err := h.service.Create(c.Context(), params)
 	if err != nil {
 		h.log.Error().Err(err).Interface("params", params).Msg("Template creation failed")
-		switch {
-		case errors.Is(err, apperrors.ErrAlreadyExists):
-			return response.Conflict(c, "Event type already in use for this environment")
-		case errors.Is(err, apperrors.ErrInvalidInput):
-			return response.BadRequest(c, nil, err.Error())
-		default:
-			return response.InternalServerError(c)
-		}
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 	return response.Created(c, "template created", toTemplateResponse(t))
 }
@@ -85,12 +77,7 @@ func (h *TemplateHandler) GetByID(c fiber.Ctx) error {
 	t, err := h.service.GetByID(c.Context(), id, workspaceID)
 	if err != nil {
 		h.log.Error().Err(err).Interface("templateID", id).Msg("GetByID failed")
-		switch {
-		case errors.Is(err, apperrors.ErrTemplateNotFound), errors.Is(err, apperrors.ErrNotFound):
-			return response.NotFound(c, "Template not found or belongs to another workspace")
-		default:
-			return response.InternalServerError(c)
-		}
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 	return response.OK(c, "template fetched", toTemplateResponse(t))
 }
@@ -108,7 +95,7 @@ func (h *TemplateHandler) List(c fiber.Ctx) error {
 	templates, err := h.service.List(c.Context(), workspaceID, envID)
 	if err != nil {
 		h.log.Error().Err(err).Msg("List templates failed")
-		return response.InternalServerError(c)
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 
 	resp := make([]dtos.TemplateResponse, len(templates))
@@ -150,16 +137,7 @@ func (h *TemplateHandler) Update(c fiber.Ctx) error {
 	t, err := h.service.Update(c.Context(), params)
 	if err != nil {
 		h.log.Error().Err(err).Interface("params", params).Msg("Template update failed")
-		switch {
-		case errors.Is(err, apperrors.ErrNotFound):
-			return response.NotFound(c, "Template not found or belongs to another workspace")
-		case errors.Is(err, apperrors.ErrAlreadyExists):
-			return response.Conflict(c, "Event type already in use for this environment")
-		case errors.Is(err, apperrors.ErrInvalidInput):
-			return response.BadRequest(c, nil, err.Error())
-		default:
-			return response.InternalServerError(c)
-		}
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 	return response.OK(c, "updated", toTemplateResponse(t))
 }
@@ -177,7 +155,7 @@ func (h *TemplateHandler) Delete(c fiber.Ctx) error {
 
 	err = h.service.Delete(c.Context(), id, workspaceID)
 	if err != nil {
-		return response.BadRequest(c, nil, err.Error())
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 	return response.OK(c, "template deleted", nil)
 }
@@ -189,7 +167,11 @@ func (h *TemplateHandler) CreateChannel(c fiber.Ctx) error {
 	if err != nil {
 		return response.Unauthorized(c, "missing workspace id")
 	}
-	templateID := c.Params("templateId")
+	templateID,ok := utils.ParseIDParam(c,"templateID")
+
+	if !ok{
+		return response.BadRequest(c,nil,"provide valid template ID")
+	}
 
 	var req dtos.CreateTemplateChannelRequest
 	if err := c.Bind().JSON(&req); err != nil {
@@ -202,7 +184,7 @@ func (h *TemplateHandler) CreateChannel(c fiber.Ctx) error {
 	}
 
 	params := domain.CreateTemplateChannelParams{
-		TemplateID:      utils.MustStringToUUID(templateID),
+		TemplateID:      templateID,
 		WorkspaceID:     workspaceID,
 		ChannelConfigID: configID,
 		Channel:         req.Channel,
@@ -212,16 +194,7 @@ func (h *TemplateHandler) CreateChannel(c fiber.Ctx) error {
 	tc, err := h.service.CreateChannel(c.Context(), params)
 	if err != nil {
 		h.log.Error().Err(err).Interface("params", params).Msg("CreateChannel failed")
-		switch {
-		case errors.Is(err, apperrors.ErrNotFound):
-			return response.NotFound(c, "Template not found")
-		case errors.Is(err, apperrors.ErrAlreadyExists):
-			return response.Conflict(c, "This channel already exists for this template")
-		case errors.Is(err, apperrors.ErrInvalidInput):
-			return response.BadRequest(c, nil, err.Error())
-		default:
-			return response.InternalServerError(c)
-		}
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 	return response.Created(c, "channel created", toTemplateChannelResponse(tc))
 }
@@ -236,7 +209,7 @@ func (h *TemplateHandler) ListChannels(c fiber.Ctx) error {
 	channels, err := h.service.ListChannels(c.Context(), utils.MustStringToUUID(templateID), workspaceID)
 	if err != nil {
 		h.log.Error().Err(err).Interface("templateID", templateID).Msg("ListChannels failed")
-		return response.InternalServerError(c)
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 
 	resp := make([]dtos.TemplateChannelResponse, len(channels))
@@ -251,8 +224,14 @@ func (h *TemplateHandler) UpdateChannel(c fiber.Ctx) error {
 	if err != nil {
 		return response.Unauthorized(c, "missing workspace id")
 	}
-	templateID := c.Params("templateId")
-	id := c.Params("id")
+	templateID, ok := utils.ParseIDParam(c, "templateID")
+	if !ok {
+		return response.BadRequest(c, nil, "invalid template id")
+	}
+	channelID, ok := utils.ParseIDParam(c, "channelID")
+	if !ok {
+		return response.BadRequest(c, nil, "invalid channel id")
+	}
 
 	var req dtos.UpdateTemplateChannelRequest
 	if err := c.Bind().JSON(&req); err != nil {
@@ -260,8 +239,8 @@ func (h *TemplateHandler) UpdateChannel(c fiber.Ctx) error {
 	}
 
 	params := domain.UpdateTemplateChannelParams{
-		ID:          utils.MustStringToUUID(id),
-		TemplateID:  utils.MustStringToUUID(templateID),
+		ID:          channelID,
+		TemplateID:  templateID,
 		WorkspaceID: workspaceID,
 		Content:     req.Content,
 		IsActive:    req.IsActive,
@@ -270,16 +249,7 @@ func (h *TemplateHandler) UpdateChannel(c fiber.Ctx) error {
 	tc, err := h.service.UpdateChannel(c.Context(), params)
 	if err != nil {
 		h.log.Error().Err(err).Interface("params", params).Msg("UpdateChannel failed")
-		switch {
-		case errors.Is(err, apperrors.ErrNotFound):
-			return response.NotFound(c, "Channel not found")
-		case errors.Is(err, apperrors.ErrAlreadyExists):
-			return response.Conflict(c, "This channel already exists for this template")
-		case errors.Is(err, apperrors.ErrInvalidInput):
-			return response.BadRequest(c, nil, err.Error())
-		default:
-			return response.InternalServerError(c)
-		}
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 	return response.OK(c, "channel updated", toTemplateChannelResponse(tc))
 }
@@ -289,18 +259,19 @@ func (h *TemplateHandler) DeleteChannel(c fiber.Ctx) error {
 	if err != nil {
 		return response.Unauthorized(c, "missing workspace id")
 	}
-	templateID := c.Params("templateId")
-	id := c.Params("id")
+	templateID, ok := utils.ParseIDParam(c, "templateID")
+	if !ok {
+		return response.BadRequest(c, nil, "invalid template id")
+	}
+	channelID, ok := utils.ParseIDParam(c, "channelID")
+	if !ok {
+		return response.BadRequest(c, nil, "invalid channel id")
+	}
 
-	err = h.service.DeleteChannel(c.Context(), utils.MustStringToUUID(id), utils.MustStringToUUID(templateID), workspaceID)
+	err = h.service.DeleteChannel(c.Context(), channelID, templateID, workspaceID)
 	if err != nil {
-		h.log.Error().Err(err).Str("channelID", id).Msg("DeleteChannel failed")
-		switch {
-		case errors.Is(err, apperrors.ErrDependencyFailure):
-			return response.Conflict(c, err.Error())
-		default:
-			return response.InternalServerError(c)
-		}
+		h.log.Error().Err(err).Interface("channelID", channelID).Msg("DeleteChannel failed")
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 	return response.OK(c, "channel deleted", nil)
 }

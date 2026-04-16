@@ -61,6 +61,7 @@ type CreateTemplateChannelParams struct {
 type UpdateTemplateChannelParams struct {
 	ID          pgtype.UUID
 	TemplateID  pgtype.UUID
+	ChannelConfigID *pgtype.UUID
 	WorkspaceID pgtype.UUID
 	Content     map[string]any
 	IsActive    *bool

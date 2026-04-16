@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
@@ -28,10 +29,6 @@ type TemplateService interface {
 	DeleteChannel(ctx context.Context, id, templateID, workspaceID pgtype.UUID) error
 }
 
-var validChannels = map[string]bool{
-	"email": true, "sms": true, "push": true,
-	"slack": true, "whatsapp": true, "webhook": true, "in_app": true,
-}
 
 var validStatuses = map[string]bool{
 	"draft": true, "live": true, "dropped": true,
@@ -59,11 +56,11 @@ func (s *templateService) Update(ctx context.Context, params domain.UpdateTempla
 	if params.Status != nil && !validStatuses[*params.Status] {
 		return nil, fmt.Errorf("%w: invalid status %s", apperrors.ErrInvalidInput, *params.Status)
 	}
-	
+
 	current, err := s.repo.GetByID(ctx, params.ID, params.WorkspaceID)
-    if err != nil {
-        return nil, err 
-    }
+	if err != nil {
+		return nil, err
+	}
 
 	if params.Status != nil && *params.Status == "live" && current.Status != "live" {
 		hasActive, err := s.repo.HasActiveChannels(ctx, params.ID)
@@ -99,41 +96,117 @@ func (s *templateService) Delete(ctx context.Context, id, workspaceID pgtype.UUI
 // ---- Template Channels ----
 
 func (s *templateService) CreateChannel(ctx context.Context, params domain.CreateTemplateChannelParams) (*domain.TemplateChannel, error) {
-	if !validChannels[params.Channel] {
-		return nil, fmt.Errorf("invalid channel: %s", params.Channel)
+	if !consts.ValidChannels[params.Channel] {
+		return nil, fmt.Errorf("%w: invalid channel %s", apperrors.ErrInvalidInput, params.Channel)
 	}
 	if len(params.Content) == 0 {
-		return nil, fmt.Errorf("content is required")
+		return nil, fmt.Errorf("%w: content is required", apperrors.ErrInvalidInput)
 	}
-	
-	_, err := s.repo.GetByID(ctx, params.TemplateID, params.WorkspaceID)
+
+	template, err := s.repo.GetByID(ctx, params.TemplateID, params.WorkspaceID)
 	if err != nil {
-		return nil, fmt.Errorf("template not found")
+		return nil, err
 	}
-	
+
+	if template.Status == "dropped" {
+		return nil, fmt.Errorf("%w: cannot modify channels of a dropped template", apperrors.ErrInvalidInput)
+	}
+
 	return s.repo.CreateChannel(ctx, params)
 }
 
 func (s *templateService) ListChannels(ctx context.Context, templateID, workspaceID pgtype.UUID) ([]*domain.TemplateChannel, error) {
 	_, err := s.repo.GetByID(ctx, templateID, workspaceID)
 	if err != nil {
-		return nil, fmt.Errorf("template not found")
+		return nil, err
 	}
 	return s.repo.ListChannels(ctx, templateID)
 }
 
 func (s *templateService) UpdateChannel(ctx context.Context, params domain.UpdateTemplateChannelParams) (*domain.TemplateChannel, error) {
-	_, err := s.repo.GetByID(ctx, params.TemplateID, params.WorkspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("template not found")
+
+	if params.Content != nil && len(params.Content) == 0 {
+		return nil, fmt.Errorf("%w: content cannot be empty", apperrors.ErrInvalidInput)
 	}
+
+	channel, err := s.repo.GetChannelByID(ctx, params.ID)
+	if err != nil {
+		return nil, err
+	}
+	if channel.TemplateID != params.TemplateID {
+		return nil, apperrors.ErrNotFound
+	}
+
+	template, err := s.repo.GetByID(ctx, params.TemplateID, params.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	if template.Status == "dropped" {
+		return nil, fmt.Errorf("%w: cannot modify channels of a dropped template", apperrors.ErrInvalidInput)
+	}
+	if template.Status == "live" && params.IsActive != nil && !*params.IsActive {
+		channels, err := s.repo.ListChannels(ctx, params.TemplateID)
+		if err != nil {
+			return nil, err
+		}
+
+		hasOtherActive := false
+		for _, ch := range channels {
+			if ch.IsActive && ch.ID.Bytes != params.ID.Bytes {
+				hasOtherActive = true
+				break
+			}
+		}
+		if !hasOtherActive {
+			return nil, fmt.Errorf("%w: cannot disable the last active channel of a live template", apperrors.ErrInvalidInput)
+		}
+	}
+
 	return s.repo.UpdateChannel(ctx, params)
 }
 
 func (s *templateService) DeleteChannel(ctx context.Context, id, templateID, workspaceID pgtype.UUID) error {
-	_, err := s.repo.GetByID(ctx, templateID, workspaceID)
+
+	channel, err := s.repo.GetChannelByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("template not found")
+		return err
 	}
+	if channel.TemplateID != templateID {
+		return apperrors.ErrNotFound
+	}
+
+	template, err := s.repo.GetByID(ctx, templateID, workspaceID)
+	if err != nil {
+		return err
+	}
+
+	if template.Status == "dropped" {
+		return fmt.Errorf("%w: cannot modify channels of a dropped template", apperrors.ErrInvalidInput)
+	}
+
+	if template.Status == "live" {
+		channels, err := s.repo.ListChannels(ctx, templateID)
+		if err != nil {
+			return err
+		}
+		activeCount := 0
+		isCurrentlyActive := false
+
+		for _, ch := range channels {
+			if !ch.IsActive {
+				continue
+			}
+			activeCount++
+			if ch.ID.Bytes == id.Bytes {
+				isCurrentlyActive = true
+			}
+		}
+
+		if isCurrentlyActive && activeCount <= 1 {
+			return fmt.Errorf("%w: cannot delete the last active channel of a live template", apperrors.ErrInvalidInput)
+		}
+	}
+
 	return s.repo.DeleteChannel(ctx, id, templateID)
 }

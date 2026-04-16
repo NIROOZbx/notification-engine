@@ -98,6 +98,7 @@ type ChannelConfig struct {
 	Channel     string
 	Provider    string
 	Credentials map[string]any
+	Encrypted   string 
 	IsTest      bool
 }
 

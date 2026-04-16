@@ -49,7 +49,9 @@ type RouterDeps struct {
 	ApiKeyMiddleware  middleware.ApiKeyMiddleware
 	NotifHandler      *handlers.NotificationHandler
 	SubscriberHandler *handlers.SubscriberHandler
-	TemplateHandler *handlers.TemplateHandler
+	TemplateHandler   *handlers.TemplateHandler
+	LayoutHandler     *handlers.LayoutHandler
+	ChnlConfigHandler *handlers.ChannelConfigHandler
 }
 
 func StartApp(cfg *config.Config) (*App, error) {
@@ -93,7 +95,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 	wspRepo := repositories.NewWorkspaceRepository(repo, db)
 	notifRepo := repositories.NewNotificationRepository(repo)
 	subscriberRepo := repositories.NewSubscriberRepo(repo)
-	templateRepo:=repositories.NewTemplateRepository(repo)
+	templateRepo := repositories.NewTemplateRepository(repo)
+	layoutRepo := repositories.NewLayoutRepo(repo)
+	chnlConfigRepo := repositories.NewChannelConfigRepo(repo)
 
 	// ==========================================
 	// 3. SERVICE LAYER (Business Logic)
@@ -104,7 +108,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
 	subscriberSvc := services.NewSubscriberService(subscriberRepo)
-	templateSvc:=services.NewTemplateService(templateRepo)
+	templateSvc := services.NewTemplateService(templateRepo)
+	layoutSvc := services.NewLayoutService(layoutRepo)
+	chnlConfigSvc := services.NewChannelConfigService(chnlConfigRepo, cfg.SecretKey)
 
 	// ==========================================
 	//  ENGINE CONFIGURATION
@@ -116,7 +122,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	engine := core.NewEngine(notifRepo, producer, appLogger, render)
 
-	setUpProviders(engine)
+	setUpProviders(engine,appLogger)
 
 	consumers := setUpConsumers(kafkaCfg.Broker, engine, kafkaCfg.GroupID, appLogger)
 
@@ -130,7 +136,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService, appLogger)
 	notifHandler := handlers.NewNotificationHandler(engine, notifRepo, appLogger)
 	subscriberHandler := handlers.NewSubscriberHandler(subscriberSvc, appLogger)
-	templateHandler:=handlers.NewTemplateHandler(templateSvc,appLogger)
+	templateHandler := handlers.NewTemplateHandler(templateSvc, appLogger)
+	layoutHandler := handlers.NewLayoutHandler(layoutSvc, appLogger)
+	chnlConfigHandler := handlers.NewChannelConfigHandler(chnlConfigSvc, appLogger)
 
 	// ==========================================
 	// 5. FIBER SETUP & ROUTING
@@ -159,7 +167,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 		ApiKeyMiddleware:  apiKeyMiddleware,
 		NotifHandler:      notifHandler,
 		SubscriberHandler: subscriberHandler,
-		TemplateHandler: templateHandler,
+		TemplateHandler:   templateHandler,
+		LayoutHandler:     layoutHandler,
+		ChnlConfigHandler: chnlConfigHandler,
 	}
 
 	SetUpRoutes(&r)
@@ -177,12 +187,12 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 }
 
-func setUpProviders(e *core.Engine) {
+func setUpProviders(e *core.Engine,log zerolog.Logger) {
 
 	channels := []string{"email", "sms", "push"}
 
 	for _, val := range channels {
-		mockProvider := provider.NewMockProvider(val)
+		mockProvider := provider.NewMockProvider(val,log)
 
 		e.RegisterMockProvider(mockProvider)
 	}
