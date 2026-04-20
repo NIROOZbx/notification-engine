@@ -18,6 +18,10 @@ tasks:
     desc: Stop all containers
     cmds:
       - docker compose -f {{.COMPOSE_FILE}} down
+  stop:
+    desc: Stop containers
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} stop
 
   down-v:
     desc: Stop containers and delete all volumes — fresh start

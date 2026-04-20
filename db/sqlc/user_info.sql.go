@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteUserContactInfo = `-- name: DeleteUserContactInfo :exec
+DELETE FROM user_info
+WHERE id = $1
+  AND workspace_id = $2
+`
+
+type DeleteUserContactInfoParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *Queries) DeleteUserContactInfo(ctx context.Context, arg DeleteUserContactInfoParams) error {
+	_, err := q.db.Exec(ctx, deleteUserContactInfo, arg.ID, arg.WorkspaceID)
+	return err
+}
+
 const getContactByExternalUserAndChannel = `-- name: GetContactByExternalUserAndChannel :one
 SELECT id, workspace_id, environment_id, external_user_id, channel, contact_value, metadata, verified, created_at, updated_at FROM user_info
 WHERE workspace_id    = $1
@@ -49,6 +65,49 @@ func (q *Queries) GetContactByExternalUserAndChannel(ctx context.Context, arg Ge
 	return i, err
 }
 
+const listSubscribers = `-- name: ListSubscribers :many
+SELECT id, workspace_id, environment_id, external_user_id, channel, contact_value, metadata, verified, created_at, updated_at FROM user_info
+WHERE workspace_id = $1
+  AND environment_id = $2
+ORDER BY created_at DESC
+`
+
+type ListSubscribersParams struct {
+	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID `db:"environment_id" json:"environment_id"`
+}
+
+func (q *Queries) ListSubscribers(ctx context.Context, arg ListSubscribersParams) ([]UserInfo, error) {
+	rows, err := q.db.Query(ctx, listSubscribers, arg.WorkspaceID, arg.EnvironmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserInfo
+	for rows.Next() {
+		var i UserInfo
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.EnvironmentID,
+			&i.ExternalUserID,
+			&i.Channel,
+			&i.ContactValue,
+			&i.Metadata,
+			&i.Verified,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertUserContactInfo = `-- name: UpsertUserContactInfo :one
 INSERT INTO user_info (
     workspace_id,
@@ -64,7 +123,8 @@ INSERT INTO user_info (
 ON CONFLICT (workspace_id, environment_id, external_user_id, channel)
 DO UPDATE SET
     contact_value = EXCLUDED.contact_value,
-    metadata      = EXCLUDED.metadata
+    metadata      = EXCLUDED.metadata,
+    verified      = EXCLUDED.verified
 RETURNING id, workspace_id, environment_id, external_user_id, channel, contact_value, metadata, verified, created_at, updated_at
 `
 

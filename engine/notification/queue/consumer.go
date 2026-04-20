@@ -9,7 +9,7 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-type ProcessFunc func(ctx context.Context, event models.NotificationEvent) error
+type ProcessFunc func(ctx context.Context, event *models.NotificationEvent) error
 
 type Consumer interface {
 	Start(ctx context.Context) error
@@ -48,15 +48,19 @@ func (c *consumer) Start(ctx context.Context) error {
 			c.log.Error().Err(err).Msg("failed to fetch message")
 			continue
 		}
-		var event models.NotificationEvent
-
-		if err := sonic.Unmarshal(msg.Value, &event); err != nil {
+		event := &models.NotificationEvent{}
+		if err := sonic.Unmarshal(msg.Value, event); err != nil {
 			c.log.Error().Err(err).Msg("failed to unmarshal notification event")
 			c.reader.CommitMessages(ctx, msg)
 			continue
 		}
 
-		if err:=c.processFunc(ctx,event); err!=nil{
+		c.log.Info().
+			Str("event_id", event.NotificationLogID).
+			Int("attempt", event.AttemptNumber+1).
+			Msg("consumer picked up message")
+
+		if err:=c.processFunc(ctx, event); err!=nil{
 			c.log.Error().Err(err).Str("event_id", event.NotificationLogID).Msg("failed to process event")
 			continue 
 		}

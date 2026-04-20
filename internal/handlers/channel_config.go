@@ -152,7 +152,7 @@ func (h *ChannelConfigHandler) SetDefault(c fiber.Ctx) error {
 		return response.Unauthorized(c, "missing workspace id")
 	}
 
-	id, ok := utils.ParseIDParam(c, "id")
+	id, ok := utils.ParseIDParam(c,"id")
 	if !ok {
 		return response.BadRequest(c, nil, "invalid channel config id")
 	}

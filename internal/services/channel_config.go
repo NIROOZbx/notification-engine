@@ -9,7 +9,6 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/encryptor"
-	"github.com/bytedance/sonic"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -40,12 +39,7 @@ func (s *channelConfigService) Create(ctx context.Context, params domain.CreateC
 		return nil, err
 	}
 
-	credBytes, err := sonic.Marshal(params.Credentials)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format credentials: %w", err)
-	}
-
-	encryptedString, err := encryptor.Encrypt(credBytes, s.secretKey)
+	encryptedString, err := encryptor.EncryptMap(params.Credentials, s.secretKey)
 	if err != nil {
 		return nil, fmt.Errorf("encryption failed: %w", err)
 	}
@@ -75,17 +69,26 @@ func (s *channelConfigService) GetDefaultChannelConfig(ctx context.Context, work
 
 func (s *channelConfigService) UpdateChannelConfig(ctx context.Context, params domain.UpdateChannelConfigParams) (*domain.ChannelConfig, error) {
 	var encrypted *string
+
 	if params.Credentials != nil {
-		credBytes, err := sonic.Marshal(params.Credentials)
+		existing, err := s.repo.GetChannelConfigByID(ctx, params.ID, params.WorkspaceID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to format credentials: %w", err)
+			return nil, err
 		}
 
-		encryptedData, err := encryptor.Encrypt(credBytes, s.secretKey)
+		fullCreds, err := encryptor.DecryptToMap(existing.Encrypted, s.secretKey)
+		if err != nil {
+			fullCreds = make(map[string]string)
+		}
+
+		for k, v := range params.Credentials {
+			fullCreds[k] = v
+		}
+		e, err := encryptor.EncryptMap(fullCreds, s.secretKey)
 		if err != nil {
 			return nil, fmt.Errorf("encryption failed: %w", err)
 		}
-		encrypted = &encryptedData
+		encrypted = &e
 	}
 
 	cfg, err := s.repo.UpdateChannelConfig(ctx, encrypted, params)
@@ -130,24 +133,6 @@ func (s *channelConfigService) SetChannelConfigDefault(ctx context.Context, id, 
 	return s.repo.SetChannelConfigDefault(ctx, id, workspaceID)
 }
 
-func (s *channelConfigService) decryptCredentials(cfg *domain.ChannelConfig) error {
-	if cfg == nil || cfg.Encrypted == "" {
-		return nil
-	}
-
-	decryptedBytes, err := encryptor.Decrypt(cfg.Encrypted, s.secretKey)
-	if err != nil {
-		return apperrors.ErrDecryptionFailed
-	}
-
-	var originalCreds map[string]any
-	if err := sonic.Unmarshal(decryptedBytes, &originalCreds); err != nil {
-		return fmt.Errorf("failed to unmarshal credentials: %w", err)
-	}
-
-	cfg.Credentials = originalCreds
-	return nil
-}
 
 func (s *channelConfigService) validate(params domain.CreateChannelConfigParams) error {
 

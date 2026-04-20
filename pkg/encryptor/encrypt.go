@@ -8,7 +8,29 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/NIROOZbx/notification-engine/pkg/serializer"
 )
+
+func EncryptMap(data map[string]string, secretKey string) (string, error) {
+	bytes, err := serializer.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return Encrypt(bytes, secretKey)
+}
+
+func DecryptToMap(encrypted string, secretKey string) (map[string]string, error) {
+	bytes, err := Decrypt(encrypted, secretKey)
+	if err != nil {
+		return nil, err
+	}
+	var data map[string]string
+	if err := serializer.Unmarshal(bytes, &data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
 
 func Encrypt(plaintext []byte, secretKey string) (string, error) {
 

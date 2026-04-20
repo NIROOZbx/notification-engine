@@ -49,7 +49,7 @@ func GetEnvID(c fiber.Ctx) (pgtype.UUID, error) {
 func GetIsTest(c fiber.Ctx) bool {
     isTest, ok := c.Locals(consts.ISTEST).(bool)
     if !ok {
-        return false // default to false if not present
+        return false 
     }
     return isTest
 }

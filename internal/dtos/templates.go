@@ -8,10 +8,10 @@ type CreateTemplateRequest struct {
 }
 
 type UpdateTemplateRequest struct {
-    Name        *string `json:"name"        validate:"omitempty,min=1,max=255"`
-    Description *string `json:"description" validate:"omitempty,max=1000"`
-    LayoutID    *string `json:"layout_id"   validate:"omitempty,uuid"`
-    Status      *string `json:"status"      validate:"omitempty,oneof=draft live dropped"`
+	Name        *string `json:"name"        validate:"omitempty,min=1,max=255"`
+	Description *string `json:"description" validate:"omitempty,max=1000"`
+	LayoutID    *string `json:"layout_id"   validate:"omitempty,uuid"`
+	Status      *string `json:"status"      validate:"omitempty,oneof=draft live dropped"`
 }
 
 type CreateTemplateChannelRequest struct {

@@ -5,14 +5,14 @@ type CreateChannelConfigRequest struct {
     Channel     string         `json:"channel" validate:"required"`
     Provider    string         `json:"provider" validate:"required"`
     DisplayName string         `json:"display_name"`
-    Credentials map[string]any `json:"credentials" validate:"required"`
+    Credentials map[string]string `json:"credentials" validate:"required"`
     IsActive    bool           `json:"is_active"`
     IsDefault   bool           `json:"is_default"`
 }
 
 type UpdateChannelConfigRequest struct {
     DisplayName *string        `json:"display_name"`
-    Credentials map[string]any `json:"credentials"`
+    Credentials map[string]string `json:"credentials"`
     IsActive    *bool          `json:"is_active"`
 }
 

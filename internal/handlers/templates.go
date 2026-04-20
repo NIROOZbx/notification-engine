@@ -8,7 +8,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/response"
-	"github.com/bytedance/sonic"
+	"github.com/NIROOZbx/notification-engine/pkg/serializer"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
@@ -167,10 +167,10 @@ func (h *TemplateHandler) CreateChannel(c fiber.Ctx) error {
 	if err != nil {
 		return response.Unauthorized(c, "missing workspace id")
 	}
-	templateID,ok := utils.ParseIDParam(c,"templateID")
+	templateID, ok := utils.ParseIDParam(c, "templateID")
 
-	if !ok{
-		return response.BadRequest(c,nil,"provide valid template ID")
+	if !ok {
+		return response.BadRequest(c, nil, "provide valid template ID")
 	}
 
 	var req dtos.CreateTemplateChannelRequest
@@ -307,7 +307,7 @@ func toTemplateChannelResponse(tc *domain.TemplateChannel) dtos.TemplateChannelR
 	}
 
 	var content map[string]any
-	_ = sonic.Unmarshal(tc.Content, &content)
+	_ = serializer.Unmarshal(tc.Content, &content)
 
 	return dtos.TemplateChannelResponse{
 		ID:              utils.UUIDToString(tc.ID),

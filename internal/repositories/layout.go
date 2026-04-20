@@ -16,6 +16,7 @@ type LayoutRepo interface {
 	Create(ctx context.Context, params domain.CreateLayoutParams) (*domain.Layout, error)
 	List(ctx context.Context, workspaceID pgtype.UUID) ([]*domain.Layout, error)
 	GetLayoutByID(ctx context.Context, id, workspaceID pgtype.UUID) (*domain.Layout, error)
+	GetDefaultLayout(ctx context.Context, workspaceID pgtype.UUID) (*domain.Layout, error)
 	UpdateLayout(ctx context.Context, params domain.UpdateLayoutParams) (*domain.Layout, error)
 	DeleteLayout(ctx context.Context, id, workspaceID pgtype.UUID) error
 	SetLayoutDefault(ctx context.Context, id, workspaceID pgtype.UUID) error
@@ -67,6 +68,16 @@ func (l *layoutRepo) GetLayoutByID(ctx context.Context, id, workspaceID pgtype.U
 	return mapToLayout(layout), nil
 
 }
+
+func (l *layoutRepo) GetDefaultLayout(ctx context.Context, workspaceID pgtype.UUID) (*domain.Layout, error) {
+	layout, err := l.queries.GetDefaultLayout(ctx, workspaceID)
+	if err != nil {
+		return nil, apperrors.MapDBError(err)
+	}
+
+	return mapToLayout(layout), nil
+}
+
 func (l *layoutRepo) DeleteLayout(ctx context.Context, id, workspaceID pgtype.UUID) error {
 	err := l.queries.DeleteLayout(ctx, sqlc.DeleteLayoutParams{
 		ID:          id,

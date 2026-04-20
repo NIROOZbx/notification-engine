@@ -67,6 +67,8 @@ func SetUpRoutes(r *RouterDeps) {
 	current.Patch("/members/:userID/role", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
 	current.Delete("/members/:userID", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
 
+
+
 	apiKeys := current.Group("/api-keys")
 
 	apiKeys.Get("/", r.ApiKeyHandler.ListAPIKeys)
@@ -80,5 +82,8 @@ func SetUpRoutes(r *RouterDeps) {
 	subscribers := api.Group("/identify", r.ApiKeyMiddleware.Authenticate)
 	subscribers.Post("/", r.SubscriberHandler.Identify)
 	subscribers.Post("/preferences", r.SubscriberHandler.UpsertPreference)
+		// subscribers
+	subscribers.Get("/subscribers", r.SubscriberHandler.List)
+	subscribers.Delete("/subscribers/:id", r.SubscriberHandler.Delete)
 
 }

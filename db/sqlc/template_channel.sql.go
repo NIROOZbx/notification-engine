@@ -14,14 +14,13 @@ import (
 
 const createTemplateChannel = `-- name: CreateTemplateChannel :one
 INSERT INTO template_channels (
-    template_id,
-    channel_config_id,
-    channel,
-    content,
-    is_active
-) VALUES (
-    $1, $2, $3, $4, $5
-)
+        template_id,
+        channel_config_id,
+        channel,
+        content,
+        is_active
+    )
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
 `
 
@@ -57,7 +56,8 @@ func (q *Queries) CreateTemplateChannel(ctx context.Context, arg CreateTemplateC
 
 const deleteTemplateChannel = `-- name: DeleteTemplateChannel :execresult
 DELETE FROM template_channels
-WHERE id = $1 AND template_id = $2
+WHERE id = $1
+    AND template_id = $2
 `
 
 type DeleteTemplateChannelParams struct {
@@ -70,9 +70,10 @@ func (q *Queries) DeleteTemplateChannel(ctx context.Context, arg DeleteTemplateC
 }
 
 const getActiveChannelsByTemplateID = `-- name: GetActiveChannelsByTemplateID :many
-SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
+SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
+FROM template_channels
 WHERE template_id = $1
-AND is_active = true
+    AND is_active = true
 `
 
 func (q *Queries) GetActiveChannelsByTemplateID(ctx context.Context, templateID pgtype.UUID) ([]TemplateChannel, error) {
@@ -105,8 +106,10 @@ func (q *Queries) GetActiveChannelsByTemplateID(ctx context.Context, templateID 
 }
 
 const getTemplateChannelByID = `-- name: GetTemplateChannelByID :one
-SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
-WHERE id = $1 LIMIT 1
+SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
+FROM template_channels
+WHERE id = $1
+LIMIT 1
 `
 
 func (q *Queries) GetTemplateChannelByID(ctx context.Context, id pgtype.UUID) (TemplateChannel, error) {
@@ -126,10 +129,11 @@ func (q *Queries) GetTemplateChannelByID(ctx context.Context, id pgtype.UUID) (T
 }
 
 const getTemplateChannelByTemplateAndChannel = `-- name: GetTemplateChannelByTemplateAndChannel :one
-SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
+SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
+FROM template_channels
 WHERE template_id = $1
-AND channel = $2
-AND is_active = true
+    AND channel = $2
+    AND is_active = true
 `
 
 type GetTemplateChannelByTemplateAndChannelParams struct {
@@ -155,9 +159,11 @@ func (q *Queries) GetTemplateChannelByTemplateAndChannel(ctx context.Context, ar
 
 const hasActiveChannels = `-- name: HasActiveChannels :one
 SELECT EXISTS (
-    SELECT 1 FROM template_channels 
-    WHERE template_id = $1 AND is_active = true
-)
+        SELECT 1
+        FROM template_channels
+        WHERE template_id = $1
+            AND is_active = true
+    )
 `
 
 func (q *Queries) HasActiveChannels(ctx context.Context, templateID pgtype.UUID) (bool, error) {
@@ -168,7 +174,8 @@ func (q *Queries) HasActiveChannels(ctx context.Context, templateID pgtype.UUID)
 }
 
 const listTemplateChannels = `-- name: ListTemplateChannels :many
-SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at FROM template_channels
+SELECT id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
+FROM template_channels
 WHERE template_id = $1
 ORDER BY created_at DESC
 `
@@ -204,8 +211,7 @@ func (q *Queries) ListTemplateChannels(ctx context.Context, templateID pgtype.UU
 
 const updateTemplateChannel = `-- name: UpdateTemplateChannel :one
 UPDATE template_channels
-SET
-    channel_config_id = $2,
+SET channel_config_id = $2,
     content = $3,
     is_active = $4,
     updated_at = NOW()

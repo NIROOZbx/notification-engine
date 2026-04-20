@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/NIROOZbx/notification-engine/engine/notification/core"
 	"github.com/NIROOZbx/notification-engine/engine/notification/models"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
-	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
+	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/response"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
@@ -32,6 +33,7 @@ type TriggerRequest struct {
 	Data           map[string]any `json:"data"`
 	Channels       []string       `json:"channels"`
 	IdempotencyKey string         `json:"idempotency_key"`
+	ScheduledAt   *time.Time      `json:"scheduled_at" `
 }
 
 func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
@@ -49,8 +51,8 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, nil, "invalid request body")
 	}
-	
-	if err:=channelValidator(&req);err!=nil{
+
+	if err := channelValidator(&req); err != nil {
 		return response.BadRequest(c, nil, fmt.Sprintf("invalid channel: %s", err))
 	}
 
@@ -66,6 +68,7 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 		Channels:       req.Channels,
 		IdempotencyKey: req.IdempotencyKey,
 		IsTest:         isTest,
+		ScheduledAt: req.ScheduledAt,
 	}
 
 	err = h.engine.Ingest(
@@ -75,23 +78,7 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 		payload,
 	)
 	if err != nil {
-		switch err {
-		case apperrors.ErrTemplateNotFound:
-			log.Warn().Err(err).Msg("ingest failed: template not found")
-			return response.NotFound(c, "template not found")
-
-		case apperrors.ErrTemplateNotLive:
-			log.Warn().Err(err).Msg("ingest failed: template not live")
-			return response.BadRequest(c, nil, "template is not live")
-
-		case apperrors.ErrNoActiveChannels:
-			log.Warn().Err(err).Msg("ingest failed: no active channels")
-			return response.BadRequest(c, nil, "no active channels for template")
-
-		default:
-			log.Error().Err(err).Msg("failed to ingest notification")
-			return response.InternalServerError(c)
-		}
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 
 	log.Info().Str("event_type", req.EventType).Msg("notification ingested")
@@ -99,7 +86,7 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 }
 
 func channelValidator(req *TriggerRequest) error {
-	
+
 	if len(req.Channels) == 0 {
 		return nil
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
+	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/conversion"
 )
 
@@ -34,6 +35,8 @@ type UpsertPreferenceInput struct {
 type SubscriberService interface {
 	Identify(ctx context.Context, input IdentifySubscriberInput) (*domain.Subscriber, error)
 	UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*domain.UserPreference, error)
+	Delete(ctx context.Context, id, workspaceID string) error
+	List(ctx context.Context, workspaceID, environmentID string) ([]*domain.Subscriber, error)
 }
 
 type subscriberService struct {
@@ -98,4 +101,32 @@ func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPr
 
 	pref.ExternalUserID = input.ExternalUserID
 	return pref, nil
+}
+
+func (s *subscriberService) Delete(ctx context.Context, id, workspaceID string) error {
+	idUUID, err := utils.StringToUUID(id)
+	if err != nil {
+		return fmt.Errorf("%w: subscriber id", apperrors.ErrInvalidInput)
+	}
+
+	workspaceUUID, err := utils.StringToUUID(workspaceID)
+	if err != nil {
+		return fmt.Errorf("%w: workspace id", apperrors.ErrInvalidInput)
+	}
+
+	return s.repo.DeleteSubscriber(ctx, idUUID, workspaceUUID)
+}
+
+func (s *subscriberService) List(ctx context.Context, workspaceID, environmentID string) ([]*domain.Subscriber, error) {
+	workspaceUUID, err := utils.StringToUUID(workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: workspace id", apperrors.ErrInvalidInput)
+	}
+
+	envUUID, err := utils.StringToUUID(environmentID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: environment id", apperrors.ErrInvalidInput)
+	}
+
+	return s.repo.ListSubscribers(ctx, workspaceUUID, envUUID)
 }

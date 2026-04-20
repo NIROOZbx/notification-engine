@@ -7,11 +7,14 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type channelConfigRepo struct {
 	queries *sqlc.Queries
+	pool    *pgxpool.Pool
 }
 
 type ChannelConfigRepo interface {
@@ -27,8 +30,11 @@ type ChannelConfigRepo interface {
 	CountActiveProvidersForChannel(ctx context.Context, workspaceID pgtype.UUID, channel string) (int64, error)
 }
 
-func NewChannelConfigRepo(queries *sqlc.Queries) *channelConfigRepo {
-	return &channelConfigRepo{queries: queries}
+func NewChannelConfigRepo(queries *sqlc.Queries, pool *pgxpool.Pool) *channelConfigRepo {
+	return &channelConfigRepo{
+		queries: queries,
+		pool:    pool,
+	}
 }
 
 func (c *channelConfigRepo) Create(ctx context.Context, encryptedString string, params domain.CreateChannelConfigParams) (*domain.ChannelConfig, error) {
@@ -105,21 +111,26 @@ func (c *channelConfigRepo) DeleteChannelConfig(ctx context.Context, id, workspa
 }
 
 func (c *channelConfigRepo) SetChannelConfigDefault(ctx context.Context, id, workspaceID pgtype.UUID) error {
-
 	current, err := c.GetChannelConfigByID(ctx, id, workspaceID)
 	if err != nil {
 		return err
 	}
 
-	err = c.queries.SetChannelConfigDefault(ctx, sqlc.SetChannelConfigDefaultParams{
-		ID:          id,
-		WorkspaceID: workspaceID,
-		Channel:     current.Channel,
+	return pgx.BeginTxFunc(ctx, c.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+		qtx := c.queries.WithTx(tx)
+
+		if err := qtx.UnsetChannelConfigDefault(ctx, sqlc.UnsetChannelConfigDefaultParams{
+			WorkspaceID: workspaceID,
+			Channel:     current.Channel,
+		}); err != nil {
+			return err
+		}
+
+		return qtx.SetChannelConfigDefault(ctx, sqlc.SetChannelConfigDefaultParams{
+			ID:          id,
+			WorkspaceID: workspaceID,
+		})
 	})
-	if err != nil {
-		return apperrors.MapDBError(err)
-	}
-	return nil
 }
 
 func (c *channelConfigRepo) CountActiveProvidersForChannel(ctx context.Context, workspaceID pgtype.UUID, channel string) (int64, error) {

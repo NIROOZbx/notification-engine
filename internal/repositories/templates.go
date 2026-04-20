@@ -9,7 +9,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
-	"github.com/bytedance/sonic"
+	"github.com/NIROOZbx/notification-engine/pkg/serializer"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -25,6 +25,8 @@ type TemplateRepository interface {
 	Update(ctx context.Context, params domain.UpdateTemplateParams) (*domain.Template, error)
 	Delete(ctx context.Context, id, workspaceID pgtype.UUID) error
 	HasActiveChannels(ctx context.Context, templateID pgtype.UUID) (bool, error)
+	GetByEventType(ctx context.Context, workspaceID, envID pgtype.UUID, eventType string) (*domain.Template, error)
+	GetChannelByTemplateAndChannel(ctx context.Context, templateID pgtype.UUID, channel string) (*domain.TemplateChannel, error)
 
 	CreateChannel(ctx context.Context, params domain.CreateTemplateChannelParams) (*domain.TemplateChannel, error)
 	GetChannelByID(ctx context.Context, id pgtype.UUID) (*domain.TemplateChannel, error)
@@ -147,11 +149,39 @@ func (r *templateRepository) HasActiveChannels(ctx context.Context, templateID p
 	}
 	return hasActive, nil
 }
+func (r *templateRepository) GetByEventType(ctx context.Context, workspaceID, envID pgtype.UUID, eventType string) (*domain.Template, error) {
+	row, err := r.queries.GetTemplateByEventType(ctx, sqlc.GetTemplateByEventTypeParams{
+		WorkspaceID:   workspaceID,
+		EnvironmentID: envID,
+		EventType:     eventType,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.ErrNotFound
+		}
+		return nil, fmt.Errorf("get template by event type: %w", err)
+	}
+	return toTemplate(row), nil
+}
+
+func (r *templateRepository) GetChannelByTemplateAndChannel(ctx context.Context, templateID pgtype.UUID, channel string) (*domain.TemplateChannel, error) {
+	row, err := r.queries.GetTemplateChannelByTemplateAndChannel(ctx, sqlc.GetTemplateChannelByTemplateAndChannelParams{
+		TemplateID: templateID,
+		Channel:    channel,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.ErrNotFound
+		}
+		return nil, fmt.Errorf("get template channel by channel: %w", err)
+	}
+	return toTemplateChannel(row), nil
+}
 
 // ---- Template Channels ----
 
 func (r *templateRepository) CreateChannel(ctx context.Context, params domain.CreateTemplateChannelParams) (*domain.TemplateChannel, error) {
-	content, err := sonic.Marshal(params.Content)
+	content, err := serializer.Marshal(params.Content)
 	if err != nil {
 		return nil, fmt.Errorf("marshal content: %w", err)
 	}
@@ -161,7 +191,7 @@ func (r *templateRepository) CreateChannel(ctx context.Context, params domain.Cr
 		ChannelConfigID: params.ChannelConfigID,
 		Channel:         params.Channel,
 		Content:         content,
-		IsActive:        helpers.Bool(true), // Default to active
+		IsActive:        helpers.Bool(true),
 	})
 	if err != nil {
 		if apperrors.IsUniqueViolation(err) {
@@ -212,7 +242,7 @@ func (r *templateRepository) UpdateChannel(ctx context.Context, params domain.Up
 	}
 
 	if params.Content != nil {
-		content, err := sonic.Marshal(params.Content)
+		content, err := serializer.Marshal(params.Content)
 		if err != nil {
 			return nil, fmt.Errorf("marshal content: %w", err)
 		}
@@ -250,7 +280,7 @@ func (r *templateRepository) UpdateChannel(ctx context.Context, params domain.Up
 }
 
 func (r *templateRepository) DeleteChannel(ctx context.Context, id, templateID pgtype.UUID) error {
-	result,err := r.queries.DeleteTemplateChannel(ctx, sqlc.DeleteTemplateChannelParams{
+	result, err := r.queries.DeleteTemplateChannel(ctx, sqlc.DeleteTemplateChannelParams{
 		ID:         id,
 		TemplateID: templateID,
 	})
@@ -258,11 +288,10 @@ func (r *templateRepository) DeleteChannel(ctx context.Context, id, templateID p
 		return fmt.Errorf("delete template channel: %w", err)
 	}
 
-	if result.RowsAffected()==0{
-		 return apperrors.ErrNotFound 
+	if result.RowsAffected() == 0 {
+		return apperrors.ErrNotFound
 	}
 
-	
 	return nil
 }
 

@@ -11,8 +11,108 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getDueRetryNotifications = `-- name: GetDueRetryNotifications :many
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
+WHERE status = 'retrying'
+AND next_retry_at IS NOT NULL
+AND next_retry_at <= NOW()
+FOR UPDATE SKIP LOCKED
+LIMIT $1
+`
+
+func (q *Queries) GetDueRetryNotifications(ctx context.Context, limit int32) ([]NotificationLog, error) {
+	rows, err := q.db.Query(ctx, getDueRetryNotifications, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NotificationLog
+	for rows.Next() {
+		var i NotificationLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.EnvironmentID,
+			&i.TemplateID,
+			&i.ExternalUserID,
+			&i.EventType,
+			&i.Channel,
+			&i.Status,
+			&i.RenderedContent,
+			&i.IdempotencyKey,
+			&i.AttemptCount,
+			&i.IsTest,
+			&i.QueuedAt,
+			&i.Recipient,
+			&i.SentAt,
+			&i.CreatedAt,
+			&i.ScheduledAt,
+			&i.NextRetryAt,
+			&i.ErrorMessage,
+			&i.TriggerData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDueScheduledNotifications = `-- name: GetDueScheduledNotifications :many
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
+WHERE status = 'scheduled'
+AND scheduled_at IS NOT NULL
+AND scheduled_at <= NOW()
+FOR UPDATE SKIP LOCKED
+LIMIT $1
+`
+
+func (q *Queries) GetDueScheduledNotifications(ctx context.Context, limit int32) ([]NotificationLog, error) {
+	rows, err := q.db.Query(ctx, getDueScheduledNotifications, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NotificationLog
+	for rows.Next() {
+		var i NotificationLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.EnvironmentID,
+			&i.TemplateID,
+			&i.ExternalUserID,
+			&i.EventType,
+			&i.Channel,
+			&i.Status,
+			&i.RenderedContent,
+			&i.IdempotencyKey,
+			&i.AttemptCount,
+			&i.IsTest,
+			&i.QueuedAt,
+			&i.Recipient,
+			&i.SentAt,
+			&i.CreatedAt,
+			&i.ScheduledAt,
+			&i.NextRetryAt,
+			&i.ErrorMessage,
+			&i.TriggerData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getNotificationLogByID = `-- name: GetNotificationLogByID :one
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
 WHERE id = $1
 `
 
@@ -36,12 +136,16 @@ func (q *Queries) GetNotificationLogByID(ctx context.Context, id pgtype.UUID) (N
 		&i.Recipient,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.ScheduledAt,
+		&i.NextRetryAt,
+		&i.ErrorMessage,
+		&i.TriggerData,
 	)
 	return i, err
 }
 
 const getNotificationLogByIdempotencyKey = `-- name: GetNotificationLogByIdempotencyKey :one
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
 WHERE idempotency_key = $1
 `
 
@@ -65,6 +169,10 @@ func (q *Queries) GetNotificationLogByIdempotencyKey(ctx context.Context, idempo
 		&i.Recipient,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.ScheduledAt,
+		&i.NextRetryAt,
+		&i.ErrorMessage,
+		&i.TriggerData,
 	)
 	return i, err
 }
@@ -79,23 +187,29 @@ INSERT INTO notification_logs (
     channel,
     recipient,
     idempotency_key,
-    is_test
+    is_test,
+    scheduled_at,
+    trigger_data,
+    status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data
 `
 
 type InsertNotificationLogParams struct {
-	WorkspaceID    pgtype.UUID `db:"workspace_id" json:"workspace_id"`
-	EnvironmentID  pgtype.UUID `db:"environment_id" json:"environment_id"`
-	TemplateID     pgtype.UUID `db:"template_id" json:"template_id"`
-	ExternalUserID string      `db:"external_user_id" json:"external_user_id"`
-	EventType      string      `db:"event_type" json:"event_type"`
-	Channel        string      `db:"channel" json:"channel"`
-	Recipient      string      `db:"recipient" json:"recipient"`
-	IdempotencyKey string      `db:"idempotency_key" json:"idempotency_key"`
-	IsTest         bool        `db:"is_test" json:"is_test"`
+	WorkspaceID    pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID  pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	TemplateID     pgtype.UUID        `db:"template_id" json:"template_id"`
+	ExternalUserID string             `db:"external_user_id" json:"external_user_id"`
+	EventType      string             `db:"event_type" json:"event_type"`
+	Channel        string             `db:"channel" json:"channel"`
+	Recipient      string             `db:"recipient" json:"recipient"`
+	IdempotencyKey string             `db:"idempotency_key" json:"idempotency_key"`
+	IsTest         bool               `db:"is_test" json:"is_test"`
+	ScheduledAt    pgtype.Timestamptz `db:"scheduled_at" json:"scheduled_at"`
+	TriggerData    []byte             `db:"trigger_data" json:"trigger_data"`
+	Status         string             `db:"status" json:"status"`
 }
 
 func (q *Queries) InsertNotificationLog(ctx context.Context, arg InsertNotificationLogParams) (NotificationLog, error) {
@@ -109,6 +223,9 @@ func (q *Queries) InsertNotificationLog(ctx context.Context, arg InsertNotificat
 		arg.Recipient,
 		arg.IdempotencyKey,
 		arg.IsTest,
+		arg.ScheduledAt,
+		arg.TriggerData,
+		arg.Status,
 	)
 	var i NotificationLog
 	err := row.Scan(
@@ -128,36 +245,46 @@ func (q *Queries) InsertNotificationLog(ctx context.Context, arg InsertNotificat
 		&i.Recipient,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.ScheduledAt,
+		&i.NextRetryAt,
+		&i.ErrorMessage,
+		&i.TriggerData,
 	)
 	return i, err
 }
 
-const updateNotificationLogStatus = `-- name: UpdateNotificationLogStatus :one
+const updateNotificationLog = `-- name: UpdateNotificationLog :one
 UPDATE notification_logs
 SET
     status           = $2,
     rendered_content = $3,
     attempt_count    = $4,
-    sent_at          = $5
+    sent_at          = $5,
+    next_retry_at    = $6,
+    error_message    = $7
 WHERE id = $1
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data
 `
 
-type UpdateNotificationLogStatusParams struct {
+type UpdateNotificationLogParams struct {
 	ID              pgtype.UUID        `db:"id" json:"id"`
 	Status          string             `db:"status" json:"status"`
 	RenderedContent []byte             `db:"rendered_content" json:"rendered_content"`
 	AttemptCount    int32              `db:"attempt_count" json:"attempt_count"`
 	SentAt          pgtype.Timestamptz `db:"sent_at" json:"sent_at"`
+	NextRetryAt     pgtype.Timestamptz `db:"next_retry_at" json:"next_retry_at"`
+	ErrorMessage    pgtype.Text        `db:"error_message" json:"error_message"`
 }
 
-func (q *Queries) UpdateNotificationLogStatus(ctx context.Context, arg UpdateNotificationLogStatusParams) (NotificationLog, error) {
-	row := q.db.QueryRow(ctx, updateNotificationLogStatus,
+func (q *Queries) UpdateNotificationLog(ctx context.Context, arg UpdateNotificationLogParams) (NotificationLog, error) {
+	row := q.db.QueryRow(ctx, updateNotificationLog,
 		arg.ID,
 		arg.Status,
 		arg.RenderedContent,
 		arg.AttemptCount,
 		arg.SentAt,
+		arg.NextRetryAt,
+		arg.ErrorMessage,
 	)
 	var i NotificationLog
 	err := row.Scan(
@@ -177,6 +304,52 @@ func (q *Queries) UpdateNotificationLogStatus(ctx context.Context, arg UpdateNot
 		&i.Recipient,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.ScheduledAt,
+		&i.NextRetryAt,
+		&i.ErrorMessage,
+		&i.TriggerData,
+	)
+	return i, err
+}
+
+const updateNotificationStatus = `-- name: UpdateNotificationStatus :one
+UPDATE notification_logs
+SET 
+    status = $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data
+`
+
+type UpdateNotificationStatusParams struct {
+	ID     pgtype.UUID `db:"id" json:"id"`
+	Status string      `db:"status" json:"status"`
+}
+
+func (q *Queries) UpdateNotificationStatus(ctx context.Context, arg UpdateNotificationStatusParams) (NotificationLog, error) {
+	row := q.db.QueryRow(ctx, updateNotificationStatus, arg.ID, arg.Status)
+	var i NotificationLog
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EnvironmentID,
+		&i.TemplateID,
+		&i.ExternalUserID,
+		&i.EventType,
+		&i.Channel,
+		&i.Status,
+		&i.RenderedContent,
+		&i.IdempotencyKey,
+		&i.AttemptCount,
+		&i.IsTest,
+		&i.QueuedAt,
+		&i.Recipient,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.ScheduledAt,
+		&i.NextRetryAt,
+		&i.ErrorMessage,
+		&i.TriggerData,
 	)
 	return i, err
 }

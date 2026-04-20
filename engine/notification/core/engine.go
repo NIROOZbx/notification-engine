@@ -7,10 +7,11 @@ import (
 	"slices"
 	"time"
 
-	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/engine/notification/models"
 	"github.com/NIROOZbx/notification-engine/engine/notification/provider"
 	"github.com/NIROOZbx/notification-engine/engine/notification/queue"
+	"github.com/NIROOZbx/notification-engine/internal/utils"
+	"github.com/NIROOZbx/notification-engine/pkg/encryptor"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
@@ -26,14 +27,19 @@ type CreateLogParams struct {
 	Recipient      string
 	IdempotencyKey string
 	IsTest         bool
+	ScheduledAt    *time.Time
+	TriggerData    map[string]any
+	Status         string
 }
 
-type UpdateLogParams struct {
+type UpdateNotificationLogParams struct {
 	ID              string
 	Status          string
 	RenderedContent map[string]any
 	AttemptCount    int
 	SentAt          *time.Time
+	NextRetryAt     *time.Time
+	ErrorMessage    *string
 }
 
 type CreateAttemptParams struct {
@@ -58,12 +64,12 @@ type Template struct {
 	Name        string
 }
 type TemplateChannel struct {
-	ID              string
-	TemplateID      string
-	ChannelConfigID string
-	Channel         string
-	Content         map[string]any
-	IsActive        bool
+	ID                 string
+	TemplateID         string
+	Channel            string
+	OverrideProviderID string
+	Content            map[string]any
+	IsActive           bool
 }
 
 type Contact struct {
@@ -92,13 +98,17 @@ type NotificationLog struct {
 	RenderedContent map[string]any
 	IsTest          bool
 	AttemptCount    int
+	ScheduledAt     *time.Time
+	NextRetryAt     *time.Time
+	ErrorMessage    string
+	TriggerData     map[string]any
 }
 type ChannelConfig struct {
 	ID          string
 	Channel     string
 	Provider    string
-	Credentials map[string]any
-	Encrypted   string 
+	Credentials map[string]string
+	Encrypted   string
 	IsTest      bool
 }
 
@@ -113,6 +123,13 @@ type Engine struct {
 	providers map[string]provider.Provider
 	log       zerolog.Logger
 	renderer  Renderer
+	secretKey string
+}
+type resolveProviderParams struct {
+	WorkspaceID        string
+	Channel            string
+	IsTest             bool
+	OverrideProviderID string
 }
 
 type Renderer interface {
@@ -126,13 +143,15 @@ type Repository interface {
 	CreateNotificationLog(ctx context.Context, params CreateLogParams) (*NotificationLog, error)
 	GetNotificationLogByID(ctx context.Context, id string) (*NotificationLog, error)
 	GetNotificationLogByIdempotencyKey(ctx context.Context, key string) (*NotificationLog, error)
-	UpdateNotificationLogStatus(ctx context.Context, params UpdateLogParams) error
+	UpdateNotificationLog(ctx context.Context, params UpdateNotificationLogParams) error
+	UpdateNotificationStatus(ctx context.Context, id string, status string) error
 	InsertNotificationAttempt(ctx context.Context, params CreateAttemptParams) error
 	GetActiveChannelsByTemplateID(ctx context.Context, templateID string) ([]TemplateChannel, error)
 	GetTemplateChannel(ctx context.Context, templateID, channel string) (*TemplateChannel, error)
 	GetChannelConfigByID(ctx context.Context, channelConfigID, workspaceID string) (*ChannelConfig, error)
 	GetLayoutByID(ctx context.Context, layoutID, workspaceID string) (*Layout, error)
 	GetTemplateByID(ctx context.Context, workspaceID, templateID string) (*Template, error)
+	GetDefaultChannelConfig(ctx context.Context, workspaceID, channel string) (*ChannelConfig, error)
 }
 
 type Producer interface {
@@ -140,13 +159,14 @@ type Producer interface {
 	Close() error
 }
 
-func NewEngine(repo Repository, producer Producer, log zerolog.Logger, render Renderer) *Engine {
+func NewEngine(repo Repository, producer Producer, log zerolog.Logger, render Renderer, secretKey string) *Engine {
 	return &Engine{
 		repo:      repo,
 		producer:  producer,
 		providers: make(map[string]provider.Provider),
 		log:       log,
 		renderer:  render,
+		secretKey: secretKey,
 	}
 }
 
@@ -157,8 +177,10 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 
 	template, err := e.repo.GetTemplateByEventType(ctx, workspaceID, envID, payload.EventType)
 	if err != nil {
+		e.log.Warn().Err(err).Str("event_type", payload.EventType).Msg("INGEST_STOP: Template not found")
 		return fmt.Errorf("template not found: %w", err)
 	}
+	e.log.Info().Interface("template", template.ID).Msg("INGEST_STEP: Template resolved")
 
 	if template.Status != "live" {
 		return fmt.Errorf("template %s is not live (status: %s)", template.ID, template.Status)
@@ -168,18 +190,32 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 	if err != nil {
 		return fmt.Errorf("failed to fetch channels: %w", err)
 	}
+	e.log.Info().Int("count", len(activeChannels)).Msg("identified potential channels for template")
 	if len(activeChannels) == 0 {
 		return fmt.Errorf("no active channels for template")
 	}
 
 	var finalChannel []TemplateChannel
 	for _, ch := range activeChannels {
-		if _, err := topicByChannel(ch.Channel); err != nil {
+		if !ch.IsActive {
+			e.log.Debug().Str("channel", ch.Channel).Msg("skipping inactive channel")
+			continue
+		}
+		if _, err := queue.TopicByChannel(ch.Channel); err != nil {
 			return fmt.Errorf("configuration error: unsupported channel '%s'", ch.Channel)
 		}
 		if len(payload.Channels) == 0 || slices.Contains(payload.Channels, ch.Channel) {
-            finalChannel = append(finalChannel, ch)
-        }
+			finalChannel = append(finalChannel, ch)
+		}
+	}
+	e.log.Info().
+		Int("identified", len(activeChannels)).
+		Int("final", len(finalChannel)).
+		Interface("requested_channels", payload.Channels).
+		Msg("INGEST_STEP: Channel resolution finished")
+
+	if len(finalChannel) == 0 {
+		e.log.Warn().Msg("INGEST_SKIP: No channels matched the request after filtering")
 	}
 
 	for _, ch := range finalChannel {
@@ -188,8 +224,6 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 			Str("event_type", payload.EventType).
 			Str("external_user_id", payload.ExternalUserID).
 			Logger()
-
-		
 
 		channelKey := fmt.Sprintf("%s:%s", payload.IdempotencyKey, ch.Channel)
 		_, err := e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
@@ -203,13 +237,23 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 		}
 		contact, err := e.repo.GetContactByExternalUserAndChannel(ctx, workspaceID, envID, payload.ExternalUserID, ch.Channel)
 		if err != nil {
-			l.Warn().Err(err).Msg("recipient contact not found, skipping")
+			l.Warn().
+				Err(err).
+				Str("external_user_id", payload.ExternalUserID).
+				Str("channel", ch.Channel).
+				Msg("INGEST_SKIP: Recipient contact not found for this channel")
 			continue
 		}
+		l.Info().Str("recipient", contact.ContactValue).Msg("found recipient contact")
 
 		if e.isOptedOut(ctx, contact.ID, ch.Channel, payload.EventType, l) {
 			l.Info().Msg("user has opted out of this channel/event")
 			continue
+		}
+
+		status := "queued"
+		if payload.ScheduledAt != nil && payload.ScheduledAt.After(time.Now()) {
+			status = "scheduled"
 		}
 
 		logParams := CreateLogParams{
@@ -222,6 +266,9 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 			IdempotencyKey: channelKey,
 			Recipient:      contact.ContactValue,
 			IsTest:         payload.IsTest,
+			ScheduledAt:    payload.ScheduledAt,
+			TriggerData:    payload.Data,
+			Status:         status,
 		}
 
 		notifLog, err := e.repo.CreateNotificationLog(ctx, logParams)
@@ -229,7 +276,13 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 			l.Error().Err(err).Str("channel", ch.Channel).Msg("failed to create notification log")
 			continue
 		}
-		event := models.NotificationEvent{
+
+		if payload.ScheduledAt != nil && payload.ScheduledAt.After(time.Now()) {
+			l.Info().Str("log_id", notifLog.ID).Msg("notification successfully scheduled for future delivery")
+			continue
+		}
+
+		event := &models.NotificationEvent{
 			NotificationLogID: notifLog.ID,
 			WorkspaceID:       notifLog.WorkspaceID,
 			EnvironmentID:     notifLog.EnvironmentID,
@@ -238,79 +291,111 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 			AttemptNumber:     0,
 			Recipient:         contact.ContactValue,
 		}
-		topic, _ := topicByChannel(ch.Channel)
+		topic, _ := queue.TopicByChannel(ch.Channel)
 
 		err = e.producer.Publish(ctx, topic, event)
 
 		if err != nil {
 			l.Error().Err(err).Str("log_id", notifLog.ID).Msg("failed to publish to kafka")
-			params := UpdateLogParams{
-				ID:              notifLog.ID,
-				Status:          "failed",
-				RenderedContent: nil,
-				AttemptCount:    0,
-			}
-			err = e.repo.UpdateNotificationLogStatus(ctx, params)
+			err = e.repo.UpdateNotificationStatus(ctx, notifLog.ID, "failed")
 			if err != nil {
 				l.Error().Err(err).Msg("failed to update log status after kafka failure")
 			}
 			continue
 		}
-		l.Debug().Str("log_id", notifLog.ID).Msg("notification successfully ingested")
+		l.Info().
+			Str("log_id", notifLog.ID).
+			Str("recipient", contact.ContactValue).
+			Str("event_type", payload.EventType).
+			Str("workspace", workspaceID).
+			Msg("notification successfully ingested and published to kafka")
 	}
 	return nil
 
 }
 
-func (e *Engine) Process(ctx context.Context, event models.NotificationEvent) error {
-	notifLogs, err := e.repo.GetNotificationLogByID(ctx, event.NotificationLogID)
 
+
+func (e *Engine) ProcessDLQ(ctx context.Context, event *models.NotificationEvent) error {
+	e.log.Error().
+		Str("log_id", event.NotificationLogID).
+		Str("channel", event.Channel).
+		Int("attempts", event.AttemptNumber).
+		Msg("TERMINAL FAILURE: Notification reached DLQ")
+	return nil
+}
+
+func (e *Engine) Process(ctx context.Context, event *models.NotificationEvent) error {
+	e.log.Info().
+		Str("log_id", event.NotificationLogID).
+		Int("attempt", event.AttemptNumber+1).
+		Msg("engine picked up message from queue")
+
+	notifLog, err := e.repo.GetNotificationLogByID(ctx, event.NotificationLogID)
+	if err != nil {
+		e.log.Error().Err(err).Str("log_id", event.NotificationLogID).Msg("failed to fetch notification log")
+		return err
+	}
+
+	e.log.Info().
+		Str("log_id", notifLog.ID).
+		Str("channel", notifLog.Channel).
+		Str("status", notifLog.Status).
+		Msg("processing notification")
+
+	if notifLog.Recipient == "" {
+		e.updateLogStatus(ctx, notifLog.ID, "failed")
+		return fmt.Errorf("recipient is empty for log %q", notifLog.ID)
+	}
+
+	err = e.repo.UpdateNotificationStatus(ctx, notifLog.ID, "processing")
 	if err != nil {
 		return err
 	}
 
-	if notifLogs.Recipient == "" {
-		e.updateLogStatus(ctx, notifLogs.ID, "failed")
-		return fmt.Errorf("recipient is empty for log %q", notifLogs.ID)
-	}
-
-	err = e.repo.UpdateNotificationLogStatus(ctx, UpdateLogParams{
-		ID:           notifLogs.ID,
-		Status:       "processing",
-		AttemptCount: notifLogs.AttemptCount,
-	})
-
+	templateChannel, err := e.repo.GetTemplateChannel(ctx, notifLog.TemplateID, notifLog.Channel)
 	if err != nil {
-		return err
-	}
-	templateChannel, err := e.repo.GetTemplateChannel(ctx, notifLogs.TemplateID, notifLogs.Channel)
-	if err != nil {
-		e.updateLogStatus(ctx, notifLogs.ID, "failed")
-		return err
-	}
-	template, err := e.repo.GetTemplateByID(ctx, event.WorkspaceID, templateChannel.TemplateID)
-	if err != nil {
-		e.updateLogStatus(ctx, notifLogs.ID, "failed")
+		e.updateLogStatus(ctx, notifLog.ID, "failed")
 		return err
 	}
 
-	p, err := e.resolveProvider(notifLogs)
+	template, err := e.repo.GetTemplateByID(ctx, notifLog.WorkspaceID, templateChannel.TemplateID)
 	if err != nil {
-		e.updateLogStatus(ctx, notifLogs.ID, "failed")
+		e.updateLogStatus(ctx, notifLog.ID, "failed")
+		return err
+	}
 
+	params := &resolveProviderParams{
+		WorkspaceID:        notifLog.WorkspaceID,
+		Channel:            notifLog.Channel,
+		IsTest:             notifLog.IsTest,
+		OverrideProviderID: templateChannel.OverrideProviderID,
+	}
+
+	p, creds, err := e.resolveProvider(ctx, params)
+	if err != nil {
+		e.updateLogStatus(ctx, notifLog.ID, "failed")
+		return err
+	}
+
+	if err := e.validateConfig(p, creds); err != nil {
+		e.updateLogStatus(ctx, notifLog.ID, "failed")
 		return err
 	}
 
 	rendered, err := e.renderContent(templateChannel, event.Data, p)
 	if err != nil {
-		e.updateLogStatus(ctx, notifLogs.ID, "failed")
+		e.updateLogStatus(ctx, notifLog.ID, "failed")
 		return err
 	}
 
-	if notifLogs.Channel == "email" {
-		rendered, err = e.wrapWithLayout(ctx, rendered, template.LayoutID, notifLogs.WorkspaceID)
+	if notifLog.Channel == "email" {
+		e.log.Debug().Str("layout_id", template.LayoutID).Msg("attempting to wrap email with layout")
+		rendered, err = e.wrapWithLayout(ctx, rendered, template.LayoutID, notifLog.WorkspaceID)
+		e.log.Info().Interface("rendered", rendered).Str("layout id", template.LayoutID).Str("for workspace", notifLog.WorkspaceID).Msg("rendering content with layout wrapping")
 		if err != nil {
-			e.updateLogStatus(ctx, notifLogs.ID, "failed")
+			e.log.Error().Err(err).Str("log_id", notifLog.ID).Msg("layout wrapping failed")
+			e.updateLogStatus(ctx, notifLog.ID, "failed")
 			return err
 		}
 	}
@@ -320,82 +405,47 @@ func (e *Engine) Process(ctx context.Context, event models.NotificationEvent) er
 
 	startTime := time.Now()
 	sendErr := p.Send(sendCtx, provider.Message{
-		To:      notifLogs.Recipient,
+		To:      notifLog.Recipient,
 		Channel: p.Channel(),
 		Content: rendered,
-	})
-
-	status := "sent"
-
-	if sendErr != nil {
-		status = "failed"
-	}
+	}, creds)
 
 	duration := time.Since(startTime)
-
+	attemptStatus := "sent"
 	var errMessage string
 	if sendErr != nil {
+		attemptStatus = "failed"
 		errMessage = sendErr.Error()
 	}
 
 	err = e.repo.InsertNotificationAttempt(ctx, CreateAttemptParams{
-		NotificationLogID: notifLogs.ID,
-		AttemptCount:      notifLogs.AttemptCount + 1,
-		Status:            status,
+		NotificationLogID: notifLog.ID,
+		AttemptCount:      event.AttemptNumber + 1,
+		Status:            attemptStatus,
 		Provider:          p.Name(),
 		ErrorMessage:      errMessage,
 		DurationMs:        int(duration.Milliseconds()),
 	})
-
 	if err != nil {
 		e.log.Error().Err(err).Msg("failed to record attempt")
 	}
 
-	updateParams := UpdateLogParams{
-		ID:           notifLogs.ID,
-		Status:       status,
-		AttemptCount: notifLogs.AttemptCount + 1,
-	}
 	if sendErr == nil {
-		updateParams.SentAt = &startTime
-		updateParams.RenderedContent = rendered
+		err = e.repo.UpdateNotificationLog(ctx, UpdateNotificationLogParams{
+			ID:              notifLog.ID,
+			Status:          attemptStatus,
+			AttemptCount:    event.AttemptNumber + 1,
+			SentAt:          &startTime,
+			RenderedContent: rendered,
+		})
+		if err != nil {
+			e.log.Error().Err(err).Msg("failed to update status")
+		}
 	} else {
-		updateParams.RenderedContent = nil
+		e.handleSendFailure(ctx, notifLog, event, sendErr)
 	}
 
-	err = e.repo.UpdateNotificationLogStatus(ctx, updateParams)
-	if err != nil {
-		e.log.Error().Err(err).Msg("failed to update status to processing, continuing")
-	}
-
-	if sendErr != nil {
-		e.handleSendFailure(ctx, notifLogs, event)
-
-	}
-
-	// channelConfig,err:=e.repo.GetChannelConfigByID(ctx, templateChannel.ChannelConfigID, workspaceID)
 	return nil
-}
-
-func topicByChannel(channel string) (string, error) {
-	switch channel {
-	case "email":
-		return queue.TopicEmail, nil
-	case "sms":
-		return queue.TopicSMS, nil
-	case "push":
-		return queue.TopicPush, nil
-	case "slack":
-		return queue.TopicSlack, nil
-	case "whatsapp":
-		return queue.TopicWhatsApp, nil
-	case "webhook":
-		return queue.TopicWebhook, nil
-	case "in_app":
-		return queue.TopicInApp, nil
-	default:
-		return "", fmt.Errorf("unsupported or unknown channel: %s", channel)
-	}
 }
 
 func (e *Engine) isOptedOut(ctx context.Context, userID, channel, eventType string, l zerolog.Logger) bool {
@@ -414,7 +464,8 @@ func (e *Engine) isOptedOut(ctx context.Context, userID, channel, eventType stri
 }
 
 func (e *Engine) RegisterProvider(p provider.Provider) {
-	e.providers[p.Channel()] = p
+	key := p.Channel() + ":" + p.Name()
+	e.providers[key] = p
 }
 
 func (e *Engine) RegisterMockProvider(p provider.Provider) {
@@ -423,7 +474,7 @@ func (e *Engine) RegisterMockProvider(p provider.Provider) {
 
 func (e *Engine) renderContent(templateChannel *TemplateChannel, data map[string]any, p provider.Provider) (map[string]any, error) {
 	rendered := map[string]any{}
-	for _, key := range p.RequiredFields() {
+	for _, key := range p.RequiredContent() {
 		val, ok := templateChannel.Content[key].(string)
 		if !ok {
 			return nil, fmt.Errorf("missing key %q in template content", key)
@@ -456,53 +507,112 @@ func (e *Engine) wrapWithLayout(ctx context.Context, rendered map[string]any, la
 	}
 
 	rendered["body"] = wrappedBody
+
+	e.log.Info().Msg("successfully rendered content")
 	return rendered, nil
 }
 
-func (e *Engine) resolveProvider(notifLog *NotificationLog) (provider.Provider, error) {
-	if notifLog.IsTest {
-		p := e.providers["mock:"+notifLog.Channel]
+func (e *Engine) resolveProvider(ctx context.Context, params *resolveProviderParams) (provider.Provider, map[string]string, error) {
+	if params.IsTest {
+		e.log.Info().Str("channel", params.Channel).Msg("using mock provider for test notification")
+		p := e.providers["mock:"+params.Channel]
 		if p == nil {
-			return nil, fmt.Errorf("no mock provider for channel %q", notifLog.Channel)
+			return nil, nil, fmt.Errorf("no mock provider for channel %q", params.Channel)
 		}
-		return p, nil
+		mockCreds := map[string]string{
+			"api_key":    "mock_key",
+			"from_email": "mock@test.com",
+		}
+		return p, mockCreds, nil
 	}
 
-	p, ok := e.providers[notifLog.Channel]
+	var config *ChannelConfig
+	var err error
+
+	if params.OverrideProviderID != "" {
+		e.log.Debug().Str("config_id", params.OverrideProviderID).Msg("attempting to use provider override")
+		config, err = e.repo.GetChannelConfigByID(ctx, params.OverrideProviderID, params.WorkspaceID)
+	} else {
+		e.log.Debug().Str("channel", params.Channel).Interface("params", params).Msg("attempting to fetch default channel config")
+		config, err = e.repo.GetDefaultChannelConfig(ctx, params.WorkspaceID, params.Channel)
+	}
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch channel config: %w", err)
+	}
+
+	if config == nil {
+		return nil, nil, fmt.Errorf("no provider config found (override: %s, channel: %s)", params.OverrideProviderID, params.Channel)
+	}
+
+	e.log.Info().
+		Str("channel", params.Channel).
+		Str("provider", config.Provider).
+		Str("config_id", config.ID).
+		Msg("successfully resolved channel configuration")
+
+	creds, err := encryptor.DecryptToMap(config.Encrypted, e.secretKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decrypt credentials: %w", err)
+	}
+
+	key := params.Channel + ":" + config.Provider
+	p, ok := e.providers[key]
 	if !ok {
-		return nil, fmt.Errorf("no provider for channel %q", notifLog.Channel)
+		return nil, nil, fmt.Errorf("provider driver %q not found for channel %q", config.Provider, params.Channel)
 	}
 
-	return p, nil
+	return p, creds, nil
 }
 
 func (e *Engine) updateLogStatus(ctx context.Context, id string, status string) {
-	if err := e.repo.UpdateNotificationLogStatus(ctx, UpdateLogParams{
-		ID:     id,
-		Status: status,
-	}); err != nil {
+	if err := e.repo.UpdateNotificationStatus(ctx, id, status); err != nil {
 		e.log.Error().Err(err).Str("log_id", id).Str("status", status).Msg("failed to update log status")
 	}
 }
 
-func (e *Engine) handleSendFailure(ctx context.Context, notifLog *NotificationLog, event models.NotificationEvent) {
-	newAttemptCount := notifLog.AttemptCount + 1
+func (e *Engine) handleSendFailure(ctx context.Context, notifLog *NotificationLog, event *models.NotificationEvent, sendErr error) {
+	newAttemptCount := event.AttemptNumber + 1
 	event.AttemptNumber = newAttemptCount
 
-	if newAttemptCount >= consts.MaxAttempts {
-		e.log.Warn().Str("log_id", notifLog.ID).Msg("max attempts reached, routing to DLQ")
-		if err := e.producer.Publish(ctx, queue.TopicDLQ, event); err != nil {
-			e.log.Error().Err(err).Msg("failed to publish to DLQ")
+	delay := utils.GetNextRetryDelay(newAttemptCount)
+
+	if delay > 0 {
+		nextRetryAt := time.Now().Add(delay)
+		errStr := sendErr.Error()
+		e.log.Info().
+			Str("log_id", notifLog.ID).
+			Int("attempt", newAttemptCount).
+			Dur("delay", delay).
+			Msg("scheduling retry")
+
+		err := e.repo.UpdateNotificationLog(ctx, UpdateNotificationLogParams{
+			ID:           notifLog.ID,
+			Status:       "retrying",
+			NextRetryAt:  &nextRetryAt,
+			ErrorMessage: &errStr,
+			AttemptCount: newAttemptCount,
+		})
+		if err != nil {
+			e.log.Error().Err(err).Str("log_id", notifLog.ID).Msg("failed to update status for retry")
 		}
 		return
 	}
 
-	e.log.Info().Str("log_id", notifLog.ID).Int("attempt", newAttemptCount).Msg("routing to Retry topic")
-	if err := e.producer.Publish(ctx, queue.TopicRetry, event); err != nil {
-		e.log.Error().Err(err).Msg("failed to publish to Retry queue")
+	e.log.Warn().Str("log_id", notifLog.ID).Msg("max attempts reached or non-retriable error, routing to DLQ")
+	
+	finalErr := sendErr.Error()
+	_ = e.repo.UpdateNotificationLog(ctx, UpdateNotificationLogParams{
+		ID:           notifLog.ID,
+		Status:       "failed",
+		ErrorMessage: &finalErr,
+		AttemptCount: event.AttemptNumber,
+	})
+
+	if err := e.producer.Publish(ctx, queue.TopicDLQ, event); err != nil {
+		e.log.Error().Err(err).Msg("failed to publish to DLQ")
 	}
 }
-
 
 func validatePayload(payload *models.TriggerPayload, e zerolog.Logger) error {
 	if payload == nil {
@@ -520,4 +630,14 @@ func validatePayload(payload *models.TriggerPayload, e zerolog.Logger) error {
 	}
 	return nil
 
+}
+
+func (e *Engine) validateConfig(p provider.Provider, config map[string]string) error {
+	for _, field := range p.RequiredFields() {
+		val, ok := config[field]
+		if !ok || val == "" {
+			return fmt.Errorf("missing or empty required configuration field: %s", field)
+		}
+	}
+	return nil
 }

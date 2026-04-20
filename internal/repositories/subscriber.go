@@ -7,12 +7,16 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
+	"github.com/NIROOZbx/notification-engine/pkg/serializer"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type SubscriberRepo interface {
 	UpsertSubscriber(ctx context.Context, params sqlc.UpsertUserContactInfoParams) (*domain.Subscriber, error)
 	UpsertPreference(ctx context.Context, params sqlc.UpsertUserPreferenceParams) (*domain.UserPreference, error)
 	GetSubscriberByExternalIDAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*domain.Subscriber, error)
+	DeleteSubscriber(ctx context.Context, id, workspaceID pgtype.UUID) error
+	ListSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID) ([]*domain.Subscriber, error)
 }
 
 type subscriberRepo struct {
@@ -55,7 +59,36 @@ func (r *subscriberRepo) GetSubscriberByExternalIDAndChannel(ctx context.Context
 	return mapToSubscriber(row), nil
 }
 
+func (r *subscriberRepo) DeleteSubscriber(ctx context.Context, id, workspaceID pgtype.UUID) error {
+	return r.db.DeleteUserContactInfo(ctx, sqlc.DeleteUserContactInfoParams{
+		ID:          id,
+		WorkspaceID: workspaceID,
+	})
+}
+
+func (r *subscriberRepo) ListSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID) ([]*domain.Subscriber, error) {
+	rows, err := r.db.ListSubscribers(ctx, sqlc.ListSubscribersParams{
+		WorkspaceID:   workspaceID,
+		EnvironmentID: environmentID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	subscribers := make([]*domain.Subscriber, len(rows))
+	for i, row := range rows {
+		subscribers[i] = mapToSubscriber(row)
+	}
+
+	return subscribers, nil
+}
+
 func mapToSubscriber(row sqlc.UserInfo) *domain.Subscriber {
+	var metadata map[string]any
+	if len(row.Metadata) > 0 {
+		_ = serializer.Unmarshal(row.Metadata, &metadata)
+	}
+
 	return &domain.Subscriber{
 		ID:             utils.UUIDToString(row.ID),
 		WorkspaceID:    utils.UUIDToString(row.WorkspaceID),
@@ -64,7 +97,7 @@ func mapToSubscriber(row sqlc.UserInfo) *domain.Subscriber {
 		Channel:        row.Channel,
 		ContactValue:   row.ContactValue,
 		IsVerified:     row.Verified.Bool,
-		Metadata:       nil, 
+		Metadata:       metadata,
 		CreatedAt:      helpers.ToTime(row.CreatedAt),
 		UpdatedAt:      helpers.ToTime(row.UpdatedAt),
 	}

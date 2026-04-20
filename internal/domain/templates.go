@@ -10,7 +10,7 @@ type Template struct {
 	ID            pgtype.UUID
 	WorkspaceID   pgtype.UUID
 	EnvironmentID pgtype.UUID
-	LayoutID      pgtype.UUID 
+	LayoutID      pgtype.UUID
 	CreatedBy     pgtype.UUID
 	Name          string
 	Description   string
@@ -40,29 +40,30 @@ type UpdateTemplateParams struct {
 }
 
 type TemplateChannel struct {
-	ID              pgtype.UUID
-	TemplateID      pgtype.UUID
-	ChannelConfigID pgtype.UUID
-	Channel         string
-	Content         []byte 
-	IsActive        bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                 pgtype.UUID
+	TemplateID         pgtype.UUID
+	ChannelConfigID    pgtype.UUID
+	Channel            string
+	Content            []byte
+	IsActive           bool
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	OverrideProviderID string
 }
 
 type CreateTemplateChannelParams struct {
 	TemplateID      pgtype.UUID
-	WorkspaceID     pgtype.UUID 
-	ChannelConfigID pgtype.UUID 
+	WorkspaceID     pgtype.UUID
+	ChannelConfigID pgtype.UUID
 	Channel         string
 	Content         map[string]any
 }
 
 type UpdateTemplateChannelParams struct {
-	ID          pgtype.UUID
-	TemplateID  pgtype.UUID
+	ID              pgtype.UUID
+	TemplateID      pgtype.UUID
 	ChannelConfigID *pgtype.UUID
-	WorkspaceID pgtype.UUID
-	Content     map[string]any
-	IsActive    *bool
+	WorkspaceID     pgtype.UUID
+	Content         map[string]any
+	IsActive        *bool
 }

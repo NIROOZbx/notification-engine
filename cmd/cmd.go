@@ -30,6 +30,8 @@ func Run(a *app.App, port string) error {
 	}()
 
 	a.StartConsumers(ctx)
+	a.StartScheduler(ctx)
+	
 
 	select {
 	case err := <-errChan:
@@ -54,6 +56,7 @@ func shutdown(a *app.App, ctx context.Context) error {
 		a.Logger.Error().Err(err).Msg("fiber shutdown error")
 	}
 
+	a.StopScheduler()
 	a.StopConsumers()
 
 	if err := a.Producer.Close(); err != nil {

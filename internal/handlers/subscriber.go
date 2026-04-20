@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"github.com/NIROOZbx/notification-engine/internal/domain"
+	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/services"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
+	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/response"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
@@ -20,13 +23,6 @@ func NewSubscriberHandler(svc services.SubscriberService, log zerolog.Logger) *S
 	}
 }
 
-type IdentifyRequest struct {
-	ExternalUserID string         `json:"external_user_id" validate:"required"`
-	Channel        string         `json:"channel"          validate:"required"`
-	ContactValue   string         `json:"contact_value"    validate:"required"`
-	Metadata       map[string]any `json:"metadata"`
-}
-
 func (h *SubscriberHandler) Identify(c fiber.Ctx) error {
 	workspaceID, err := utils.GetWID(c)
 	if err != nil {
@@ -37,18 +33,12 @@ func (h *SubscriberHandler) Identify(c fiber.Ctx) error {
 		return response.Unauthorized(c, "missing environment id")
 	}
 
-	log := h.log.With().
-		Interface("workspace_id", workspaceID).
-		Interface("env_id", envID).
-		Str("event_type", "identify").
-		Logger()
-
-	var req IdentifyRequest
-	if err := c.Bind().Body(&req); err != nil {
+	var req dtos.IdentifyRequest
+	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, nil, "invalid request body")
 	}
 
-	_, err = h.svc.Identify(c.Context(), services.IdentifySubscriberInput{
+	subscriber, err := h.svc.Identify(c.Context(), services.IdentifySubscriberInput{
 		WorkspaceID:    utils.UUIDToString(workspaceID),
 		EnvironmentID:  utils.UUIDToString(envID),
 		ExternalUserID: req.ExternalUserID,
@@ -58,19 +48,11 @@ func (h *SubscriberHandler) Identify(c fiber.Ctx) error {
 	})
 
 	if err != nil {
-		log.Error().Err(err).Msg("failed to identify user")
-		return response.InternalServerError(c)
+		h.log.Error().Err(err).Str("external_user_id", req.ExternalUserID).Msg("failed to identify user")
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 
-	log.Info().Str("external_user_id", req.ExternalUserID).Msg("user identified smoothly")
-	return response.OK(c, "user identified successfully", nil)
-}
-
-type UpsertPreferenceRequest struct {
-	ExternalUserID string `json:"external_user_id" validate:"required"`
-	Channel        string `json:"channel"          validate:"required"`
-	EventType      string `json:"event_type"` 
-	IsEnabled      bool   `json:"is_enabled"`
+	return response.OK(c, "user identified successfully", toSubscriberResponse(subscriber))
 }
 
 func (h *SubscriberHandler) UpsertPreference(c fiber.Ctx) error {
@@ -83,12 +65,12 @@ func (h *SubscriberHandler) UpsertPreference(c fiber.Ctx) error {
 		return response.Unauthorized(c, "missing environment id")
 	}
 
-	var req UpsertPreferenceRequest
-	if err := c.Bind().Body(&req); err != nil {
+	var req dtos.UpsertPreferenceRequest
+	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, nil, "invalid request body")
 	}
 
-	_, err = h.svc.UpsertPreference(c.Context(), services.UpsertPreferenceInput{
+	pref, err := h.svc.UpsertPreference(c.Context(), services.UpsertPreferenceInput{
 		WorkspaceID:    utils.UUIDToString(workspaceID),
 		EnvironmentID:  utils.UUIDToString(envID),
 		ExternalUserID: req.ExternalUserID,
@@ -98,9 +80,81 @@ func (h *SubscriberHandler) UpsertPreference(c fiber.Ctx) error {
 	})
 
 	if err != nil {
-		h.log.Error().Err(err).Msg("failed to upsert preference")
-		return response.InternalServerError(c)
+		h.log.Error().Err(err).Str("external_user_id", req.ExternalUserID).Msg("failed to upsert preference")
+		return helpers.HandleServiceError(c, err, h.log)
 	}
 
-	return response.OK(c, "preference updated successfully", nil)
+	return response.OK(c, "preference updated successfully", toUserPreferenceResponse(pref))
+}
+
+func (h *SubscriberHandler) Delete(c fiber.Ctx) error {
+	workspaceID, err := utils.GetWID(c)
+	if err != nil {
+		return response.Unauthorized(c, "missing workspace id")
+	}
+
+	id, ok := utils.ParseIDParam(c, "id")
+	if !ok {
+		return response.BadRequest(c, nil, "invalid subscriber id")
+	}
+
+	err = h.svc.Delete(c.Context(), utils.UUIDToString(id), utils.UUIDToString(workspaceID))
+	if err != nil {
+		h.log.Error().Err(err).Interface("id", id).Msg("failed to delete subscriber")
+		return helpers.HandleServiceError(c, err, h.log)
+	}
+
+	return response.OK(c, "subscriber deleted successfully", nil)
+}
+
+func (h *SubscriberHandler) List(c fiber.Ctx) error {
+	workspaceID, err := utils.GetWID(c)
+	if err != nil {
+		return response.Unauthorized(c, "missing workspace id")
+	}
+	envID, err := utils.GetEnvID(c)
+	if err != nil {
+		return response.Unauthorized(c, "missing environment id")
+	}
+
+	subscribers, err := h.svc.List(c.Context(), utils.UUIDToString(workspaceID), utils.UUIDToString(envID))
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to list subscribers")
+		return helpers.HandleServiceError(c, err, h.log)
+	}
+
+	resp := make([]dtos.SubscriberResponse, len(subscribers))
+	for i, s := range subscribers {
+		resp[i] = toSubscriberResponse(s)
+	}
+
+	return response.OK(c, "subscribers fetched successfully", resp)
+}
+
+func toSubscriberResponse(s *domain.Subscriber) dtos.SubscriberResponse {
+	return dtos.SubscriberResponse{
+		ID:             s.ID,
+		WorkspaceID:    s.WorkspaceID,
+		EnvironmentID:  s.EnvironmentID,
+		ExternalUserID: s.ExternalUserID,
+		Channel:        s.Channel,
+		ContactValue:   s.ContactValue,
+		IsVerified:     s.IsVerified,
+		Metadata:       s.Metadata,
+		CreatedAt:      s.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:      s.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}
+}
+
+func toUserPreferenceResponse(p *domain.UserPreference) dtos.UserPreferenceResponse {
+	return dtos.UserPreferenceResponse{
+		ID:             p.ID,
+		SubscriberID:   p.SubscriberID,
+		ExternalUserID: p.ExternalUserID,
+		Channel:        p.Channel,
+		EventType:      p.EventType,
+		IsEnabled:      p.IsEnabled,
+		CreatedAt:      p.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:      p.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}
 }

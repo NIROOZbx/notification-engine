@@ -98,6 +98,10 @@ type NotificationLog struct {
 	Recipient       string             `db:"recipient" json:"recipient"`
 	SentAt          pgtype.Timestamptz `db:"sent_at" json:"sent_at"`
 	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ScheduledAt     pgtype.Timestamptz `db:"scheduled_at" json:"scheduled_at"`
+	NextRetryAt     pgtype.Timestamptz `db:"next_retry_at" json:"next_retry_at"`
+	ErrorMessage    pgtype.Text        `db:"error_message" json:"error_message"`
+	TriggerData     []byte             `db:"trigger_data" json:"trigger_data"`
 }
 
 type Plan struct {

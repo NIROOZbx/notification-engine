@@ -5,11 +5,15 @@ import (
 	"sync"
 
 	"github.com/NIROOZbx/notification-engine/config"
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/db"
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
 	"github.com/NIROOZbx/notification-engine/engine/notification/core"
 	"github.com/NIROOZbx/notification-engine/engine/notification/provider"
 	"github.com/NIROOZbx/notification-engine/engine/notification/queue"
+	"github.com/NIROOZbx/notification-engine/engine/notification/scheduler"
+	"github.com/NIROOZbx/notification-engine/engine/notification/sender/email"
+	"github.com/NIROOZbx/notification-engine/engine/notification/sender/sms"
 	"github.com/NIROOZbx/notification-engine/engine/notification/template"
 	"github.com/NIROOZbx/notification-engine/internal/handlers"
 	"github.com/NIROOZbx/notification-engine/internal/middleware"
@@ -18,9 +22,10 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/session"
 
 	"github.com/NIROOZbx/notification-engine/pkg/cache"
+	"github.com/NIROOZbx/notification-engine/pkg/httpclient"
 	"github.com/NIROOZbx/notification-engine/pkg/logger"
+	"github.com/NIROOZbx/notification-engine/pkg/serializer"
 	"github.com/NIROOZbx/notification-engine/pkg/validator"
-	"github.com/bytedance/sonic"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,14 +34,15 @@ import (
 )
 
 type App struct {
-	Server   *fiber.App
-	Redis    *redis.Client
-	DB       *pgxpool.Pool
-	Logger   zerolog.Logger
-	Producer core.Producer
-	Consumer map[string]queue.Consumer
-	Engine   *core.Engine
-	wg       *sync.WaitGroup
+	Server    *fiber.App
+	Redis     *redis.Client
+	DB        *pgxpool.Pool
+	Logger    zerolog.Logger
+	Consumer  map[string]queue.Consumer
+	Engine    *core.Engine
+	Scheduler *scheduler.Scheduler
+	wg        *sync.WaitGroup
+	Producer  core.Producer
 }
 
 type RouterDeps struct {
@@ -83,6 +89,8 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	v := validator.NewValidator()
 
+	httpClient := httpclient.NewClient()
+
 	// ==========================================
 	// 2. REPOSITORIES & DATA STORES
 	// ==========================================
@@ -93,11 +101,12 @@ func StartApp(cfg *config.Config) (*App, error) {
 	apiKeyRepo := repositories.NewAPIKeyRepository(repo)
 	usrRepo := repositories.NewUserRepository(repo)
 	wspRepo := repositories.NewWorkspaceRepository(repo, db)
-	notifRepo := repositories.NewNotificationRepository(repo)
+	chnlConfigRepo := repositories.NewChannelConfigRepo(repo, db)
 	subscriberRepo := repositories.NewSubscriberRepo(repo)
 	templateRepo := repositories.NewTemplateRepository(repo)
+	notifRepo := repositories.NewNotificationRepository(repo, chnlConfigRepo, templateRepo)
 	layoutRepo := repositories.NewLayoutRepo(repo)
-	chnlConfigRepo := repositories.NewChannelConfigRepo(repo)
+	schedulerRepo := repositories.NewSchedulerRepo(repo)
 
 	// ==========================================
 	// 3. SERVICE LAYER (Business Logic)
@@ -108,7 +117,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
 	subscriberSvc := services.NewSubscriberService(subscriberRepo)
-	templateSvc := services.NewTemplateService(templateRepo)
+	templateSvc := services.NewTemplateService(templateRepo, layoutRepo)
 	layoutSvc := services.NewLayoutService(layoutRepo)
 	chnlConfigSvc := services.NewChannelConfigService(chnlConfigRepo, cfg.SecretKey)
 
@@ -120,9 +129,15 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	render := template.NewRenderer()
 
-	engine := core.NewEngine(notifRepo, producer, appLogger, render)
+	engine := core.NewEngine(notifRepo, producer, appLogger, render, cfg.SecretKey)
 
-	setUpProviders(engine,appLogger)
+	setUpMockProviders(engine, appLogger)
+
+	s := scheduler.NewScheduler(producer, appLogger, schedulerRepo, consts.Interval)
+
+	engine.RegisterProvider(email.NewSendGridProvider(appLogger, httpClient))
+	engine.RegisterProvider(email.NewSESProvider(appLogger, httpClient))
+	engine.RegisterProvider(sms.NewTwilioProvider(appLogger, httpClient))
 
 	consumers := setUpConsumers(kafkaCfg.Broker, engine, kafkaCfg.GroupID, appLogger)
 
@@ -145,8 +160,8 @@ func StartApp(cfg *config.Config) (*App, error) {
 	// ==========================================
 	app := fiber.New(fiber.Config{
 
-		JSONEncoder:     sonic.Marshal,
-		JSONDecoder:     sonic.Unmarshal,
+		JSONEncoder:     serializer.Marshal,
+		JSONDecoder:     serializer.Unmarshal,
 		IdleTimeout:     cfg.Server.IdleTimeout,
 		ReadTimeout:     cfg.Server.ReadTimeout,
 		WriteTimeout:    cfg.Server.WriteTimeout,
@@ -175,25 +190,24 @@ func StartApp(cfg *config.Config) (*App, error) {
 	SetUpRoutes(&r)
 
 	return &App{
-		Server:   app,
-		Redis:    redis,
-		DB:       db,
-		Logger:   appLogger,
+		Server:    app,
+		Redis:     redis,
+		DB:        db,
+		Logger:    appLogger,
+		Consumer:  consumers,
+		Engine:    engine,
+		Scheduler: s,
 		Producer: producer,
-		Consumer: consumers,
-		Engine:   engine,
-		wg:       &sync.WaitGroup{},
+		wg:        &sync.WaitGroup{},
 	}, nil
-
 }
 
-func setUpProviders(e *core.Engine,log zerolog.Logger) {
+func setUpMockProviders(e *core.Engine, log zerolog.Logger) {
 
 	channels := []string{"email", "sms", "push"}
 
 	for _, val := range channels {
-		mockProvider := provider.NewMockProvider(val,log)
-
+		mockProvider := provider.NewMockProvider(val, log)
 		e.RegisterMockProvider(mockProvider)
 	}
 
@@ -203,30 +217,45 @@ func setUpConsumers(broker string, engine *core.Engine, groupID string, log zero
 
 	consumers := make(map[string]queue.Consumer)
 
-	topics := []string{queue.TopicDLQ, queue.TopicEmail, queue.TopicInApp, queue.TopicRetry, queue.TopicDLQ}
+	topics := []string{queue.TopicSMS, queue.TopicEmail,queue.TopicDLQ}
 
 	for _, topic := range topics {
-		workerName := topic
+		handler := engine.Process
+		if topic == queue.TopicDLQ {
+			handler = engine.ProcessDLQ
+		}
 
-		taggedLogger := log.With().Str("worker_topic", workerName).Logger()
-		consumers[topic] = queue.NewConsumer(broker, topic, groupID, engine.Process, taggedLogger)
+		taggedLogger := log.With().Str("worker_topic", topic).Logger()
+		consumers[topic] = queue.NewConsumer(broker, topic, groupID, handler, taggedLogger)
 	}
 
 	return consumers
 }
 
 func (a *App) StartConsumers(ctx context.Context) {
-	
 
 	for topic, c := range a.Consumer {
 		a.Logger.Info().Str("topic", topic).Msg("consumer started")
 		a.wg.Add(1)
 		go func() {
-
 			defer a.wg.Done()
 			c.Start(ctx)
 		}()
 	}
+}
+
+func (a *App) StartScheduler(ctx context.Context) {
+	a.Logger.Info().Msg("background scheduler started")
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		a.Scheduler.Start(ctx)
+	}()
+}
+
+func (a *App) StopScheduler() {
+	a.Logger.Info().Msg("waiting for scheduler to finish its current batch...")
+	a.wg.Wait()
 }
 
 func (a *App) StopConsumers() {

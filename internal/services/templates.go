@@ -12,7 +12,8 @@ import (
 )
 
 type templateService struct {
-	repo repositories.TemplateRepository
+	repo       repositories.TemplateRepository
+	layoutRepo repositories.LayoutRepo
 }
 
 type TemplateService interface {
@@ -34,13 +35,20 @@ var validStatuses = map[string]bool{
 	"draft": true, "live": true, "dropped": true,
 }
 
-func NewTemplateService(repo repositories.TemplateRepository) *templateService {
+func NewTemplateService(repo repositories.TemplateRepository, layoutRepo repositories.LayoutRepo) *templateService {
 	return &templateService{
-		repo: repo,
+		repo:       repo,
+		layoutRepo: layoutRepo,
 	}
 }
 
 func (s *templateService) Create(ctx context.Context, params domain.CreateTemplateParams) (*domain.Template, error) {
+	if !params.LayoutID.Valid {
+		defaultLayout, err := s.layoutRepo.GetDefaultLayout(ctx, params.WorkspaceID)
+		if err == nil && defaultLayout != nil {
+			params.LayoutID = defaultLayout.ID
+		}
+	}
 	return s.repo.Create(ctx, params)
 }
 
