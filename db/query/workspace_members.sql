@@ -50,3 +50,8 @@ LIMIT 1;
 SELECT count(*) 
 FROM workspace_members 
 WHERE workspace_id = $1 AND role = 'owner';
+
+-- name: GetWorkspaceOwnerEmails :many
+SELECT u.email FROM workspace_members m
+JOIN users u ON m.user_id = u.id
+WHERE m.workspace_id = $1 AND m.role = 'owner';

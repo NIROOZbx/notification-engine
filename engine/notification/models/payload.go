@@ -8,6 +8,7 @@ type TriggerPayload struct {
 	Data           map[string]any
 	Channels       []string
 	IdempotencyKey string
+	IsSystem       bool
 	IsTest         bool
 	ScheduledAt    *time.Time
 }

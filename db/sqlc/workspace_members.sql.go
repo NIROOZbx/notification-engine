@@ -211,6 +211,32 @@ func (q *Queries) GetWorkspaceMembersWithDetails(ctx context.Context, workspaceI
 	return items, nil
 }
 
+const getWorkspaceOwnerEmails = `-- name: GetWorkspaceOwnerEmails :many
+SELECT u.email FROM workspace_members m
+JOIN users u ON m.user_id = u.id
+WHERE m.workspace_id = $1 AND m.role = 'owner'
+`
+
+func (q *Queries) GetWorkspaceOwnerEmails(ctx context.Context, workspaceID pgtype.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, getWorkspaceOwnerEmails, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, err
+		}
+		items = append(items, email)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateMemberRole = `-- name: UpdateMemberRole :one
 UPDATE workspace_members
 SET role = $3

@@ -38,7 +38,7 @@ func (q *Queries) CountWorkspaceTemplates(ctx context.Context, workspaceID pgtyp
 }
 
 const getAllPlans = `-- name: GetAllPlans :many
-SELECT id, name, notif_limit_month, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at, max_layouts, max_templates
+SELECT id, name, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at, max_layouts, max_templates, email_limit_month, sms_limit_month, push_limit_month, slack_limit_month, whatsapp_limit_month, webhook_limit_month, in_app_limit_month, external_price_id
 FROM plans
 WHERE is_active = true
 ORDER BY price_cents ASC
@@ -56,7 +56,6 @@ func (q *Queries) GetAllPlans(ctx context.Context) ([]Plan, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.NotifLimitMonth,
 			&i.MembersLimit,
 			&i.ApiKeysLimit,
 			&i.LogRetentionDays,
@@ -67,6 +66,14 @@ func (q *Queries) GetAllPlans(ctx context.Context) ([]Plan, error) {
 			&i.UpdatedAt,
 			&i.MaxLayouts,
 			&i.MaxTemplates,
+			&i.EmailLimitMonth,
+			&i.SmsLimitMonth,
+			&i.PushLimitMonth,
+			&i.SlackLimitMonth,
+			&i.WhatsappLimitMonth,
+			&i.WebhookLimitMonth,
+			&i.InAppLimitMonth,
+			&i.ExternalPriceID,
 		); err != nil {
 			return nil, err
 		}
@@ -79,7 +86,7 @@ func (q *Queries) GetAllPlans(ctx context.Context) ([]Plan, error) {
 }
 
 const getPlanByID = `-- name: GetPlanByID :one
-SELECT id, name, notif_limit_month, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at, max_layouts, max_templates
+SELECT id, name, members_limit, api_keys_limit, log_retention_days, original_price_cents, price_cents, is_active, created_at, updated_at, max_layouts, max_templates, email_limit_month, sms_limit_month, push_limit_month, slack_limit_month, whatsapp_limit_month, webhook_limit_month, in_app_limit_month, external_price_id
 FROM plans
 WHERE id = $1
 LIMIT 1
@@ -91,7 +98,6 @@ func (q *Queries) GetPlanByID(ctx context.Context, id pgtype.UUID) (Plan, error)
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.NotifLimitMonth,
 		&i.MembersLimit,
 		&i.ApiKeysLimit,
 		&i.LogRetentionDays,
@@ -102,12 +108,20 @@ func (q *Queries) GetPlanByID(ctx context.Context, id pgtype.UUID) (Plan, error)
 		&i.UpdatedAt,
 		&i.MaxLayouts,
 		&i.MaxTemplates,
+		&i.EmailLimitMonth,
+		&i.SmsLimitMonth,
+		&i.PushLimitMonth,
+		&i.SlackLimitMonth,
+		&i.WhatsappLimitMonth,
+		&i.WebhookLimitMonth,
+		&i.InAppLimitMonth,
+		&i.ExternalPriceID,
 	)
 	return i, err
 }
 
 const getPlanByWorkspace = `-- name: GetPlanByWorkspace :one
-SELECT p.id, p.name, p.notif_limit_month, p.members_limit, p.api_keys_limit, p.log_retention_days, p.original_price_cents, p.price_cents, p.is_active, p.created_at, p.updated_at, p.max_layouts, p.max_templates
+SELECT p.id, p.name, p.members_limit, p.api_keys_limit, p.log_retention_days, p.original_price_cents, p.price_cents, p.is_active, p.created_at, p.updated_at, p.max_layouts, p.max_templates, p.email_limit_month, p.sms_limit_month, p.push_limit_month, p.slack_limit_month, p.whatsapp_limit_month, p.webhook_limit_month, p.in_app_limit_month, p.external_price_id
 from plans as p
     join workspaces as w on w.plan_id = p.id
 where w.id = $1
@@ -120,7 +134,6 @@ func (q *Queries) GetPlanByWorkspace(ctx context.Context, id pgtype.UUID) (Plan,
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.NotifLimitMonth,
 		&i.MembersLimit,
 		&i.ApiKeysLimit,
 		&i.LogRetentionDays,
@@ -131,6 +144,14 @@ func (q *Queries) GetPlanByWorkspace(ctx context.Context, id pgtype.UUID) (Plan,
 		&i.UpdatedAt,
 		&i.MaxLayouts,
 		&i.MaxTemplates,
+		&i.EmailLimitMonth,
+		&i.SmsLimitMonth,
+		&i.PushLimitMonth,
+		&i.SlackLimitMonth,
+		&i.WhatsappLimitMonth,
+		&i.WebhookLimitMonth,
+		&i.InAppLimitMonth,
+		&i.ExternalPriceID,
 	)
 	return i, err
 }

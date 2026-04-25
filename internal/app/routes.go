@@ -17,6 +17,7 @@ func SetUpRoutes(r *RouterDeps) {
 	auth.Get("/:provider/callback", r.AuthHandler.OAuthCallback)
 	auth.Post("/register", r.AuthHandler.Register)
 	auth.Post("/login", r.AuthHandler.Login)
+	api.Get("/plans", r.PlanHandler.GetAllPlans)
 
 	// onboarding — partial token
 	auth.Post("/onboarding", r.AuthMiddleware.OnboardingAuth, r.AuthHandler.CompleteOnboarding)
@@ -66,6 +67,13 @@ func SetUpRoutes(r *RouterDeps) {
 	current.Get("/members", r.WspHandler.GetWorkspaceMembers)
 	current.Patch("/members/:userID/role", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
 	current.Delete("/members/:userID", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
+	
+	// billing
+	current.Get("/usage", r.BillingHandler.GetUsage)
+	current.Get("/subscription", r.BillingHandler.GetSubscription)
+	current.Delete("/subscription", r.AuthMiddleware.RequireRole("owner", "admin"), r.BillingHandler.CancelSubscription)
+	current.Post("/checkout", r.AuthMiddleware.RequireRole("owner", "admin"), r.BillingHandler.CreateCheckout)
+
 
 
 

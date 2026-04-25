@@ -15,3 +15,8 @@ LIMIT 1;
 -- name: DeleteEnvironment :exec
 DELETE FROM environments
 WHERE id = $1;
+
+-- name: GetProductionEnvironmentByWorkspace :one
+SELECT id FROM environments
+WHERE workspace_id = $1 AND name = 'production'
+LIMIT 1;

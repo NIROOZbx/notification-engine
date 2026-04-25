@@ -12,7 +12,7 @@ import (
 )
 
 const getDueRetryNotifications = `-- name: GetDueRetryNotifications :many
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
 WHERE status = 'retrying'
 AND next_retry_at IS NOT NULL
 AND next_retry_at <= NOW()
@@ -50,6 +50,7 @@ func (q *Queries) GetDueRetryNotifications(ctx context.Context, limit int32) ([]
 			&i.NextRetryAt,
 			&i.ErrorMessage,
 			&i.TriggerData,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -62,7 +63,7 @@ func (q *Queries) GetDueRetryNotifications(ctx context.Context, limit int32) ([]
 }
 
 const getDueScheduledNotifications = `-- name: GetDueScheduledNotifications :many
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
 WHERE status = 'scheduled'
 AND scheduled_at IS NOT NULL
 AND scheduled_at <= NOW()
@@ -100,6 +101,7 @@ func (q *Queries) GetDueScheduledNotifications(ctx context.Context, limit int32)
 			&i.NextRetryAt,
 			&i.ErrorMessage,
 			&i.TriggerData,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -112,7 +114,7 @@ func (q *Queries) GetDueScheduledNotifications(ctx context.Context, limit int32)
 }
 
 const getNotificationLogByID = `-- name: GetNotificationLogByID :one
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
 WHERE id = $1
 `
 
@@ -140,12 +142,13 @@ func (q *Queries) GetNotificationLogByID(ctx context.Context, id pgtype.UUID) (N
 		&i.NextRetryAt,
 		&i.ErrorMessage,
 		&i.TriggerData,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getNotificationLogByIdempotencyKey = `-- name: GetNotificationLogByIdempotencyKey :one
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
 WHERE idempotency_key = $1
 `
 
@@ -173,6 +176,7 @@ func (q *Queries) GetNotificationLogByIdempotencyKey(ctx context.Context, idempo
 		&i.NextRetryAt,
 		&i.ErrorMessage,
 		&i.TriggerData,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -194,7 +198,7 @@ INSERT INTO notification_logs (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at
 `
 
 type InsertNotificationLogParams struct {
@@ -249,6 +253,7 @@ func (q *Queries) InsertNotificationLog(ctx context.Context, arg InsertNotificat
 		&i.NextRetryAt,
 		&i.ErrorMessage,
 		&i.TriggerData,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -261,9 +266,10 @@ SET
     attempt_count    = $4,
     sent_at          = $5,
     next_retry_at    = $6,
-    error_message    = $7
+    error_message    = $7,
+    updated_at       = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at
 `
 
 type UpdateNotificationLogParams struct {
@@ -308,6 +314,7 @@ func (q *Queries) UpdateNotificationLog(ctx context.Context, arg UpdateNotificat
 		&i.NextRetryAt,
 		&i.ErrorMessage,
 		&i.TriggerData,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -318,7 +325,7 @@ SET
     status = $2,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at
 `
 
 type UpdateNotificationStatusParams struct {
@@ -350,6 +357,7 @@ func (q *Queries) UpdateNotificationStatus(ctx context.Context, arg UpdateNotifi
 		&i.NextRetryAt,
 		&i.ErrorMessage,
 		&i.TriggerData,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

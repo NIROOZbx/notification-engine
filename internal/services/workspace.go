@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
+	"github.com/NIROOZbx/notification-engine/internal/billing"
 	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -50,12 +52,14 @@ type WorkspaceService interface {
 }
 
 type workspaceService struct {
-	repo repositories.WorkspaceRepository
+	repo          repositories.WorkspaceRepository
+	billingClient billing.Client
 }
 
-func NewWorkSpaceService(repo repositories.WorkspaceRepository) WorkspaceService {
+func NewWorkSpaceService(repo repositories.WorkspaceRepository, billingClient billing.Client) WorkspaceService {
 	return &workspaceService{
-		repo: repo,
+		repo:          repo,
+		billingClient: billingClient,
 	}
 }
 
@@ -113,8 +117,14 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 		if err != nil {
 			return fmt.Errorf("creating workspace member: %w", err)
 		}
+
+		_, err = w.billingClient.CreateSubscription(ctx, utils.UUIDToString(workspace.ID), consts.PlanFree, consts.BillingProviderSystem)
+		if err != nil {
+			return fmt.Errorf("billing subscription failed: %w", err)
+		}
+
 		result = &WorkspaceWithRole{
-			Workspace: mapToWorkspaceResponse(workspace, "Free"),
+			Workspace: mapToWorkspaceResponse(workspace, consts.PlanFree),
 			Role:      workspaceMember.Role,
 		}
 

@@ -84,3 +84,16 @@ func (q *Queries) GetEnvironmentsByWorkspace(ctx context.Context, workspaceID pg
 	}
 	return items, nil
 }
+
+const getProductionEnvironmentByWorkspace = `-- name: GetProductionEnvironmentByWorkspace :one
+SELECT id FROM environments
+WHERE workspace_id = $1 AND name = 'production'
+LIMIT 1
+`
+
+func (q *Queries) GetProductionEnvironmentByWorkspace(ctx context.Context, workspaceID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getProductionEnvironmentByWorkspace, workspaceID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}

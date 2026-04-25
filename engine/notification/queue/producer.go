@@ -20,6 +20,7 @@ func NewProducer(brokerAddr string) *producer {
 			BatchSize: 100,
 			BatchTimeout: 10 * time.Millisecond,
 			RequiredAcks: kafka.RequireAll,
+			
 		},
 	}
 }

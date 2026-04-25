@@ -12,6 +12,17 @@ const (
 	MaxAttempts = 5
 	Interval    = 30 * time.Second
 )
+const (
+	PlanFree       = "Free"
+	PlanPro        = "Pro"
+	PlanEnterprise = "Enterprise"
+)
+
+const (
+	BillingProviderSystem = "system"
+	BillingProviderStripe = "stripe"
+)
+
 
 const (
 	ChannelEmail    = "email"
@@ -47,3 +58,7 @@ var ValidProvidersByChannel = map[string]map[string]bool{
 		"apns": true,
 	},
 }
+
+const (
+	FallBackUUID="00000000-0000-0000-0000-000000000000"
+)

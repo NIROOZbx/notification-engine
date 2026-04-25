@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+
 package billing.v1;
 
 option go_package = "github.com/NIROOZbx/billing-service/gen/billing/v1;billingv1";
@@ -11,7 +12,21 @@ service BillingService {
     rpc CreateSubscription(CreateSubscriptionRequest) returns (CreateSubscriptionResponse);
     rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse);
     rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse);
+    rpc CreateCheckoutSession(CreateCheckoutSessionRequest) returns (CreateCheckoutSessionResponse);
 }
+
+
+
+message CreateCheckoutSessionRequest {
+    string workspace_id = 1;
+    string plan_id = 2;
+    string customer_email = 3;
+}
+
+message CreateCheckoutSessionResponse {
+    string checkout_url = 1;
+}
+
 
 message CheckLimitRequest {
     string workspace_id = 1;

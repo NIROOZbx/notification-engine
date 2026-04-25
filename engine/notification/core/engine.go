@@ -7,9 +7,11 @@ import (
 	"slices"
 	"time"
 
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/engine/notification/models"
 	"github.com/NIROOZbx/notification-engine/engine/notification/provider"
 	"github.com/NIROOZbx/notification-engine/engine/notification/queue"
+	"github.com/NIROOZbx/notification-engine/internal/billing"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/encryptor"
 	"github.com/google/uuid"
@@ -17,157 +19,43 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type CreateLogParams struct {
-	WorkspaceID    string
-	EnvironmentID  string
-	TemplateID     string
-	ExternalUserID string
-	EventType      string
-	Channel        string
-	Recipient      string
-	IdempotencyKey string
-	IsTest         bool
-	ScheduledAt    *time.Time
-	TriggerData    map[string]any
-	Status         string
-}
-
-type UpdateNotificationLogParams struct {
-	ID              string
-	Status          string
-	RenderedContent map[string]any
-	AttemptCount    int
-	SentAt          *time.Time
-	NextRetryAt     *time.Time
-	ErrorMessage    *string
-}
-
-type CreateAttemptParams struct {
-	NotificationLogID string
-	AttemptCount      int
-	Status            string
-	ErrorMessage      string
-	ErrorCode         string
-	Provider          string
-	ChannelConfigID   string
-	ProviderMessageID string
-	DurationMs        int
-}
-
-type Template struct {
-	ID          string
-	WorkspaceID string
-	EnvID       string
-	LayoutID    string
-	EventType   string
-	Status      string
-	Name        string
-}
-type TemplateChannel struct {
-	ID                 string
-	TemplateID         string
-	Channel            string
-	OverrideProviderID string
-	Content            map[string]any
-	IsActive           bool
-}
-
-type Contact struct {
-	ID           string
-	ContactValue string
-	Channel      string
-}
-
-type Preference struct {
-	Channel   string
-	EventType string
-	IsEnabled bool
-}
-
-type NotificationLog struct {
-	ID              string
-	WorkspaceID     string
-	EnvironmentID   string
-	TemplateID      string
-	ExternalUserID  string
-	EventType       string
-	Channel         string
-	Status          string
-	Recipient       string
-	IdempotencyKey  string
-	RenderedContent map[string]any
-	IsTest          bool
-	AttemptCount    int
-	ScheduledAt     *time.Time
-	NextRetryAt     *time.Time
-	ErrorMessage    string
-	TriggerData     map[string]any
-}
-type ChannelConfig struct {
-	ID          string
-	Channel     string
-	Provider    string
-	Credentials map[string]string
-	Encrypted   string
-	IsTest      bool
-}
-
-type Layout struct {
-	ID   string
-	HTML string
-}
-
 type Engine struct {
-	repo      Repository
-	producer  Producer
-	providers map[string]provider.Provider
-	log       zerolog.Logger
-	renderer  Renderer
-	secretKey string
-}
-type resolveProviderParams struct {
-	WorkspaceID        string
-	Channel            string
-	IsTest             bool
-	OverrideProviderID string
+	repo          Repository
+	producer      Producer
+	providers     map[string]provider.Provider
+	log           zerolog.Logger
+	renderer      Renderer
+	secretKey     string
+	billingClient billing.Client
 }
 
-type Renderer interface {
-	Render(template string, data map[string]any) (string, error)
+type EngineConfig struct {
+	Repo          Repository
+	Producer      Producer
+	Log           zerolog.Logger
+	Renderer      Renderer
+	SecretKey     string
+	BillingClient billing.Client
 }
 
-type Repository interface {
-	GetTemplateByEventType(ctx context.Context, workspaceID, envID, eventType string) (*Template, error)
-	GetContactByExternalUserAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*Contact, error)
-	GetPreferencesBySubscriberAndChannel(ctx context.Context, subscriberID, channel, eventType string) ([]Preference, error)
-	CreateNotificationLog(ctx context.Context, params CreateLogParams) (*NotificationLog, error)
-	GetNotificationLogByID(ctx context.Context, id string) (*NotificationLog, error)
-	GetNotificationLogByIdempotencyKey(ctx context.Context, key string) (*NotificationLog, error)
-	UpdateNotificationLog(ctx context.Context, params UpdateNotificationLogParams) error
-	UpdateNotificationStatus(ctx context.Context, id string, status string) error
-	InsertNotificationAttempt(ctx context.Context, params CreateAttemptParams) error
-	GetActiveChannelsByTemplateID(ctx context.Context, templateID string) ([]TemplateChannel, error)
-	GetTemplateChannel(ctx context.Context, templateID, channel string) (*TemplateChannel, error)
-	GetChannelConfigByID(ctx context.Context, channelConfigID, workspaceID string) (*ChannelConfig, error)
-	GetLayoutByID(ctx context.Context, layoutID, workspaceID string) (*Layout, error)
-	GetTemplateByID(ctx context.Context, workspaceID, templateID string) (*Template, error)
-	GetDefaultChannelConfig(ctx context.Context, workspaceID, channel string) (*ChannelConfig, error)
-}
-
-type Producer interface {
-	Publish(ctx context.Context, topic string, event any) error
-	Close() error
-}
-
-func NewEngine(repo Repository, producer Producer, log zerolog.Logger, render Renderer, secretKey string) *Engine {
+func NewEngine(cfg EngineConfig) *Engine {
 	return &Engine{
-		repo:      repo,
-		producer:  producer,
-		providers: make(map[string]provider.Provider),
-		log:       log,
-		renderer:  render,
-		secretKey: secretKey,
+		repo:          cfg.Repo,
+		producer:      cfg.Producer,
+		providers:     make(map[string]provider.Provider),
+		log:           cfg.Log,
+		renderer:      cfg.Renderer,
+		secretKey:     cfg.SecretKey,
+		billingClient: cfg.BillingClient,
 	}
+}
+
+func (e *Engine) resolveEnvID(ctx context.Context, workspaceID, envID string) (string, error) {
+	if envID != "" && envID != consts.FallBackUUID {
+		return envID, nil
+	}
+	e.log.Debug().Str("workspace_id", workspaceID).Msg("resolving global environment to production")
+	return e.repo.GetProductionEnvironmentID(ctx, workspaceID)
 }
 
 func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, payload *models.TriggerPayload) error {
@@ -175,145 +63,220 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 		return err
 	}
 
-	template, err := e.repo.GetTemplateByEventType(ctx, workspaceID, envID, payload.EventType)
+	if payload.IsSystem {
+		return e.ingestSystem(ctx, workspaceID, envID, payload)
+	}
+
+	return e.ingestNormal(ctx, &ingestContext{
+		workspaceID: workspaceID,
+		envID:       envID,
+		payload:     payload,
+		strategy:    &normalStrategy{},
+	})
+
+}
+func (e *Engine) ingestSystem(ctx context.Context, workspaceID, envID string, payload *models.TriggerPayload) error {
+	resolvedEnvID, err := e.resolveEnvID(ctx, workspaceID, envID)
 	if err != nil {
-		e.log.Warn().Err(err).Str("event_type", payload.EventType).Msg("INGEST_STOP: Template not found")
-		return fmt.Errorf("template not found: %w", err)
+		return err
 	}
-	e.log.Info().Interface("template", template.ID).Msg("INGEST_STEP: Template resolved")
-
-	if template.Status != "live" {
-		return fmt.Errorf("template %s is not live (status: %s)", template.ID, template.Status)
-	}
-
-	activeChannels, err := e.repo.GetActiveChannelsByTemplateID(ctx, template.ID)
+	owners, err := e.repo.GetWorkspaceOwners(ctx, workspaceID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch channels: %w", err)
+		return err
 	}
-	e.log.Info().Int("count", len(activeChannels)).Msg("identified potential channels for template")
-	if len(activeChannels) == 0 {
-		return fmt.Errorf("no active channels for template")
-	}
-
-	var finalChannel []TemplateChannel
-	for _, ch := range activeChannels {
-		if !ch.IsActive {
-			e.log.Debug().Str("channel", ch.Channel).Msg("skipping inactive channel")
-			continue
-		}
-		if _, err := queue.TopicByChannel(ch.Channel); err != nil {
-			return fmt.Errorf("configuration error: unsupported channel '%s'", ch.Channel)
-		}
-		if len(payload.Channels) == 0 || slices.Contains(payload.Channels, ch.Channel) {
-			finalChannel = append(finalChannel, ch)
-		}
-	}
-	e.log.Info().
-		Int("identified", len(activeChannels)).
-		Int("final", len(finalChannel)).
-		Interface("requested_channels", payload.Channels).
-		Msg("INGEST_STEP: Channel resolution finished")
-
-	if len(finalChannel) == 0 {
-		e.log.Warn().Msg("INGEST_SKIP: No channels matched the request after filtering")
+	if len(owners) == 0 {
+		e.log.Error().Str("workspace_id", workspaceID).Msg("no active owners found, skipping")
+		return nil
 	}
 
-	for _, ch := range finalChannel {
-		l := e.log.With().
-			Str("channel", ch.Channel).
-			Str("event_type", payload.EventType).
-			Str("external_user_id", payload.ExternalUserID).
-			Logger()
-
-		channelKey := fmt.Sprintf("%s:%s", payload.IdempotencyKey, ch.Channel)
-		_, err := e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
-		if err == nil {
-			l.Info().Msg("duplicate idempotency key, skipping")
+	for _, contact := range owners {
+		ownerPayload := *payload
+		ownerPayload.IdempotencyKey = fmt.Sprintf("%s:%s", payload.IdempotencyKey, contact.ContactValue)
+		ic := &ingestContext{
+			workspaceID: workspaceID,
+			envID:       resolvedEnvID,
+			payload:     &ownerPayload,
+			strategy:    &systemStrategy{recipientEmail: contact.ContactValue},
+		}
+		if err := e.ingestNormal(ctx, ic); err != nil {
+			e.log.Error().Err(err).Str("owner", contact.ContactValue).Msg("system ingest failed")
 			continue
 		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			l.Error().Err(err).Msg("idempotency check failed")
+	}
+
+	return nil
+
+}
+
+func (e *Engine) ingestNormal(ctx context.Context, ic *ingestContext) error {
+
+	template, err := e.resolveTemplate(ctx, ic.workspaceID, ic.envID, ic.payload.EventType)
+	if err != nil {
+		return err
+	}
+	ic.template = template
+
+	channels, err := e.resolveChannels(ctx, template.ID, ic.payload)
+	if err != nil {
+		return err
+	}
+
+	for _, ch := range channels {
+		ic.ch = &ch
+		if err := e.ingestChannel(ctx, ic); err != nil {
+			e.log.Error().Err(err).Str("channel", ch.Channel).Msg("channel ingest failed")
 			continue
 		}
-		contact, err := e.repo.GetContactByExternalUserAndChannel(ctx, workspaceID, envID, payload.ExternalUserID, ch.Channel)
-		if err != nil {
-			l.Warn().
-				Err(err).
-				Str("external_user_id", payload.ExternalUserID).
-				Str("channel", ch.Channel).
-				Msg("INGEST_SKIP: Recipient contact not found for this channel")
-			continue
-		}
-		l.Info().Str("recipient", contact.ContactValue).Msg("found recipient contact")
-
-		if e.isOptedOut(ctx, contact.ID, ch.Channel, payload.EventType, l) {
-			l.Info().Msg("user has opted out of this channel/event")
-			continue
-		}
-
-		status := "queued"
-		if payload.ScheduledAt != nil && payload.ScheduledAt.After(time.Now()) {
-			status = "scheduled"
-		}
-
-		logParams := CreateLogParams{
-			WorkspaceID:    workspaceID,
-			EnvironmentID:  envID,
-			TemplateID:     template.ID,
-			ExternalUserID: payload.ExternalUserID,
-			EventType:      payload.EventType,
-			Channel:        ch.Channel,
-			IdempotencyKey: channelKey,
-			Recipient:      contact.ContactValue,
-			IsTest:         payload.IsTest,
-			ScheduledAt:    payload.ScheduledAt,
-			TriggerData:    payload.Data,
-			Status:         status,
-		}
-
-		notifLog, err := e.repo.CreateNotificationLog(ctx, logParams)
-		if err != nil {
-			l.Error().Err(err).Str("channel", ch.Channel).Msg("failed to create notification log")
-			continue
-		}
-
-		if payload.ScheduledAt != nil && payload.ScheduledAt.After(time.Now()) {
-			l.Info().Str("log_id", notifLog.ID).Msg("notification successfully scheduled for future delivery")
-			continue
-		}
-
-		event := &models.NotificationEvent{
-			NotificationLogID: notifLog.ID,
-			WorkspaceID:       notifLog.WorkspaceID,
-			EnvironmentID:     notifLog.EnvironmentID,
-			Channel:           notifLog.Channel,
-			Data:              payload.Data,
-			AttemptNumber:     0,
-			Recipient:         contact.ContactValue,
-		}
-		topic, _ := queue.TopicByChannel(ch.Channel)
-
-		err = e.producer.Publish(ctx, topic, event)
-
-		if err != nil {
-			l.Error().Err(err).Str("log_id", notifLog.ID).Msg("failed to publish to kafka")
-			err = e.repo.UpdateNotificationStatus(ctx, notifLog.ID, "failed")
-			if err != nil {
-				l.Error().Err(err).Msg("failed to update log status after kafka failure")
-			}
-			continue
-		}
-		l.Info().
-			Str("log_id", notifLog.ID).
-			Str("recipient", contact.ContactValue).
-			Str("event_type", payload.EventType).
-			Str("workspace", workspaceID).
-			Msg("notification successfully ingested and published to kafka")
 	}
 	return nil
 
 }
 
+func (e *Engine) resolveTemplate(ctx context.Context, workspaceID, envID, eventType string) (*Template, error) {
+	template, err := e.repo.GetTemplateByEventType(ctx, workspaceID, envID, eventType)
+	if err != nil {
+		e.log.Warn().Err(err).Str("event_type", eventType).Msg("INGEST_STOP: Template not found")
+		return nil, fmt.Errorf("template not found: %w", err)
+	}
+	if template.Status != "live" {
+		return nil, fmt.Errorf("template %s is not live (status: %s)", template.ID, template.Status)
+	}
+	return template, nil
+}
+
+func (e *Engine) resolveChannels(ctx context.Context, templateID string, payload *models.TriggerPayload) ([]TemplateChannel, error) {
+	activeChannels, err := e.repo.GetActiveChannelsByTemplateID(ctx, templateID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch channels: %w", err)
+	}
+
+	var final []TemplateChannel
+	for _, ch := range activeChannels {
+		if !ch.IsActive {
+			continue
+		}
+		if _, err := queue.TopicByChannel(ch.Channel); err != nil {
+			return nil, fmt.Errorf("unsupported channel '%s'", ch.Channel)
+		}
+
+		if len(payload.Channels) == 0 || slices.Contains(payload.Channels, ch.Channel) {
+			final = append(final, ch)
+		}
+	}
+
+	if len(final) == 0 {
+		e.log.Warn().Msg("INGEST_SKIP: No channels matched after filtering")
+	}
+	return final, nil
+}
+
+func (e *Engine) ingestChannel(ctx context.Context, ic *ingestContext) error {
+	l := e.log.With().
+		Str("channel", ic.ch.Channel).
+		Str("event_type", ic.payload.EventType).
+		Str("external_user_id", ic.payload.ExternalUserID).
+		Logger()
+
+	if !ic.strategy.SkipBillingCheck() {
+		resp, err := e.billingClient.CheckLimit(ctx, ic.workspaceID, ic.envID, ic.ch.Channel)
+
+		if err != nil {
+			e.log.Warn().Err(err).Str("channel", ic.ch.Channel).Msg("billing check failed, allowing send")
+		} else if !resp.Allowed {
+			e.log.Warn().
+				Str("reason", resp.Reason).
+				Str("channel", ic.ch.Channel).
+				Msg("INGEST_SKIP: limit exceeded")
+			return nil
+		}
+	}
+
+	channelKey := fmt.Sprintf("%s:%s", ic.payload.IdempotencyKey, ic.ch.Channel)
+	ic.channelKey = channelKey
+	_, err := e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
+	if err == nil {
+		l.Info().Msg("duplicate idempotency key, skipping")
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		l.Error().Err(err).Msg("idempotency check failed")
+		return err
+	}
+	contact, err := ic.strategy.ResolveContact(ctx, e.repo, ic)
+	if err != nil {
+		return err
+	}
+
+	ic.contact = contact
+	l.Info().Str("recipient", contact.ContactValue).Msg("found recipient contact")
+
+	if !ic.strategy.SkipOptOut() {
+		if e.isOptedOut(ctx, contact.ID, ic.ch.Channel, ic.payload.EventType, l) {
+			l.Info().Msg("user has opted out of this channel/event")
+			return nil
+		}
+	}
+
+	return e.createAndPublish(ctx, ic)
+}
+
+func (e *Engine) createAndPublish(ctx context.Context, ic *ingestContext) error {
+	status := "queued"
+	if ic.payload.ScheduledAt != nil && ic.payload.ScheduledAt.After(time.Now()) {
+		status = "scheduled"
+	}
+
+	logParams := CreateLogParams{
+		WorkspaceID:    ic.workspaceID,
+		EnvironmentID:  ic.envID,
+		TemplateID:     ic.template.ID,
+		ExternalUserID: ic.payload.ExternalUserID,
+		EventType:      ic.payload.EventType,
+		Channel:        ic.ch.Channel,
+		IdempotencyKey: ic.channelKey,
+		Recipient:      ic.contact.ContactValue,
+		IsTest:         ic.payload.IsTest,
+		ScheduledAt:    ic.payload.ScheduledAt,
+		TriggerData:    ic.payload.Data,
+		Status:         status,
+	}
+
+	notifLog, err := e.repo.CreateNotificationLog(ctx, logParams)
+	if err != nil {
+		return fmt.Errorf("create notification log: %w", err)
+	}
+	if status == "scheduled" {
+		e.log.Debug().Str("log_id", notifLog.ID).Msg("notification successfully scheduled for future delivery")
+		return nil
+	}
+	return e.publishToKafka(ctx, notifLog, ic)
+}
+
+func (e *Engine) publishToKafka(ctx context.Context, notifLog *NotificationLog, ic *ingestContext) error {
+
+	event := &models.NotificationEvent{
+		NotificationLogID: notifLog.ID,
+		WorkspaceID:       notifLog.WorkspaceID,
+		EnvironmentID:     notifLog.EnvironmentID,
+		Channel:           notifLog.Channel,
+		Data:              ic.payload.Data,
+		Recipient:         ic.contact.ContactValue,
+	}
+	topic, err := queue.TopicByChannel(ic.ch.Channel)
+	if err != nil {
+		return fmt.Errorf("unsupported channel: %w", err)
+	}
+	err = e.producer.Publish(ctx, topic, event)
+
+	if err != nil {
+		updateErr := e.repo.UpdateNotificationStatus(ctx, notifLog.ID, "failed")
+		if updateErr != nil {
+			e.log.Error().Err(updateErr).Msg("failed to update log status")
+		}
+		return fmt.Errorf("publish to kafka: %w", err)
+	}
+	return nil
+}
 
 
 func (e *Engine) ProcessDLQ(ctx context.Context, event *models.NotificationEvent) error {
@@ -372,7 +335,7 @@ func (e *Engine) Process(ctx context.Context, event *models.NotificationEvent) e
 		OverrideProviderID: templateChannel.OverrideProviderID,
 	}
 
-	p, creds, err := e.resolveProvider(ctx, params)
+	p, creds, configID, err := e.resolveProvider(ctx, params)
 	if err != nil {
 		e.updateLogStatus(ctx, notifLog.ID, "failed")
 		return err
@@ -409,6 +372,20 @@ func (e *Engine) Process(ctx context.Context, event *models.NotificationEvent) e
 		Channel: p.Channel(),
 		Content: rendered,
 	}, creds)
+
+	if !notifLog.IsTest {
+		err := e.billingClient.RecordUsage(ctx, billing.RecordUsageInput{
+			WorkspaceID:     notifLog.WorkspaceID,
+			EnvironmentID:   notifLog.EnvironmentID,
+			ChannelConfigID: configID,
+			ChannelName:     notifLog.Channel,
+			Provider:        p.Name(),
+			Success:         sendErr == nil,
+		})
+		if err != nil {
+			e.log.Error().Err(err).Str("log_id", notifLog.ID).Msg("failed to record billing usage")
+		}
+	}
 
 	duration := time.Since(startTime)
 	attemptStatus := "sent"
@@ -512,18 +489,18 @@ func (e *Engine) wrapWithLayout(ctx context.Context, rendered map[string]any, la
 	return rendered, nil
 }
 
-func (e *Engine) resolveProvider(ctx context.Context, params *resolveProviderParams) (provider.Provider, map[string]string, error) {
+func (e *Engine) resolveProvider(ctx context.Context, params *resolveProviderParams) (provider.Provider, map[string]string, string, error) {
 	if params.IsTest {
 		e.log.Info().Str("channel", params.Channel).Msg("using mock provider for test notification")
 		p := e.providers["mock:"+params.Channel]
 		if p == nil {
-			return nil, nil, fmt.Errorf("no mock provider for channel %q", params.Channel)
+			return nil, nil, "", fmt.Errorf("no mock provider for channel %q", params.Channel)
 		}
 		mockCreds := map[string]string{
 			"api_key":    "mock_key",
 			"from_email": "mock@test.com",
 		}
-		return p, mockCreds, nil
+		return p, mockCreds, "", nil
 	}
 
 	var config *ChannelConfig
@@ -538,11 +515,11 @@ func (e *Engine) resolveProvider(ctx context.Context, params *resolveProviderPar
 	}
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to fetch channel config: %w", err)
+		return nil, nil, "", fmt.Errorf("failed to fetch channel config: %w", err)
 	}
 
 	if config == nil {
-		return nil, nil, fmt.Errorf("no provider config found (override: %s, channel: %s)", params.OverrideProviderID, params.Channel)
+		return nil, nil, "", fmt.Errorf("no provider config found (override: %s, channel: %s)", params.OverrideProviderID, params.Channel)
 	}
 
 	e.log.Info().
@@ -553,16 +530,16 @@ func (e *Engine) resolveProvider(ctx context.Context, params *resolveProviderPar
 
 	creds, err := encryptor.DecryptToMap(config.Encrypted, e.secretKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decrypt credentials: %w", err)
+		return nil, nil, "", fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
 	key := params.Channel + ":" + config.Provider
 	p, ok := e.providers[key]
 	if !ok {
-		return nil, nil, fmt.Errorf("provider driver %q not found for channel %q", config.Provider, params.Channel)
+		return nil, nil, "", fmt.Errorf("provider driver %q not found for channel %q", config.Provider, params.Channel)
 	}
 
-	return p, creds, nil
+	return p, creds, config.ID, nil
 }
 
 func (e *Engine) updateLogStatus(ctx context.Context, id string, status string) {
@@ -580,7 +557,7 @@ func (e *Engine) handleSendFailure(ctx context.Context, notifLog *NotificationLo
 	if delay > 0 {
 		nextRetryAt := time.Now().Add(delay)
 		errStr := sendErr.Error()
-		e.log.Info().
+		e.log.Debug().
 			Str("log_id", notifLog.ID).
 			Int("attempt", newAttemptCount).
 			Dur("delay", delay).
@@ -600,7 +577,7 @@ func (e *Engine) handleSendFailure(ctx context.Context, notifLog *NotificationLo
 	}
 
 	e.log.Warn().Str("log_id", notifLog.ID).Msg("max attempts reached or non-retriable error, routing to DLQ")
-	
+
 	finalErr := sendErr.Error()
 	_ = e.repo.UpdateNotificationLog(ctx, UpdateNotificationLogParams{
 		ID:           notifLog.ID,
@@ -618,15 +595,18 @@ func validatePayload(payload *models.TriggerPayload, e zerolog.Logger) error {
 	if payload == nil {
 		return fmt.Errorf("payload is required")
 	}
-	if payload.ExternalUserID == "" {
-		return fmt.Errorf("external_user_id is required")
+	if payload.IdempotencyKey == "" {
+		e.Warn().Msg("idempotency key not provided, generated one")
+		payload.IdempotencyKey = uuid.New().String()
 	}
 	if payload.EventType == "" {
 		return fmt.Errorf("event_type is required")
 	}
-	if payload.IdempotencyKey == "" {
-		e.Warn().Msg("idempotency key not provided, generated one")
-		payload.IdempotencyKey = uuid.New().String()
+	if payload.IsSystem {
+		return nil
+	}
+	if payload.ExternalUserID == "" {
+		return fmt.Errorf("external_user_id is required")
 	}
 	return nil
 

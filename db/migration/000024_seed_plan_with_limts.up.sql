@@ -1,45 +1,29 @@
-INSERT INTO plans (
-        id,
-        name,
-        email_limit_month,
-        sms_limit_month,
-        push_limit_month,
-        slack_limit_month,
-        whatsapp_limit_month,
-        webhook_limit_month,
-        in_app_limit_month,
-VALUES (
-        gen_random_uuid(),
-        'free',
-        1000,
-        100,
-        10000,
-        500,
-        50,
-        1000,
-        10000,
-    ),
-    (
-        gen_random_uuid(),
-        'pro',
-        50000,
-        2000,
-        500000,
-        10000,
-        1000,
-        50000,
-        500000,
-    ),
-    (
-        gen_random_uuid(),
-        'enterprise',
-        -1,
-        -1,
-        -1,
-        -1,
-        -1,
-        -1,
-        -1,
-        -1,
-        -1,
-    );
+UPDATE plans
+SET email_limit_month = 1000,
+    sms_limit_month = 100,
+    push_limit_month = 10000,
+    slack_limit_month = 500,
+    whatsapp_limit_month = 50,
+    webhook_limit_month = 1000,
+    in_app_limit_month = 10000
+WHERE name = 'Free';
+
+UPDATE plans
+SET email_limit_month = 50000,
+    sms_limit_month = 2000,
+    push_limit_month = 500000,
+    slack_limit_month = 10000,
+    whatsapp_limit_month = 1000,
+    webhook_limit_month = 50000,
+    in_app_limit_month = 500000
+WHERE name = 'Pro';
+
+UPDATE plans
+SET email_limit_month = -1,
+    sms_limit_month = -1,
+    push_limit_month = -1,
+    slack_limit_month = -1,
+    whatsapp_limit_month = -1,
+    webhook_limit_month = -1,
+    in_app_limit_month = -1
+WHERE name= 'Enterprise';

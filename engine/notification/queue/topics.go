@@ -12,6 +12,7 @@ const (
 	TopicInApp    = "notifications.in_app"
 	TopicRetry    = "notifications.retry"
 	TopicDLQ      = "notifications.dlq"
+	TopicSystem ="system.notifications"
 )
 
 func TopicByChannel(channel string) (string, error) {

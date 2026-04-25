@@ -51,6 +51,12 @@ type OAuthConfig struct {
 	ClientSecret string `mapstructure:"client_secret"`
 	RedirectURL  string `mapstructure:"redirect_url"`
 }
+type StripeConfig struct {
+	SecretKey     string `mapstructure:"secret_key"`
+	WebhookSecret string `mapstructure:"webhook_secret"`
+	SuccessURL    string `mapstructure:"success_url"`
+	CancelURL     string `mapstructure:"cancel_url"`
+}
 
 type AuthConfig struct {
 	AccessExpiryMinutes int    `mapstructure:"access_expiry_minutes"`
@@ -64,6 +70,10 @@ type KafkaConfig struct {
 	Broker  string `mapstructure:"broker"`
 	GroupID string `mapstructure:"group_id"`
 }
+type GRPCConfig struct {
+	GRPCPort string `mapstructure:"grpc_port"`
+}
+
 
 type Config struct {
 	Server    ServerConfig   `mapstructure:"server"`
@@ -74,6 +84,7 @@ type Config struct {
 	OAuth     OAuthConfig    `mapstructure:"oauth"`
 	Kafka     KafkaConfig    `mapstructure:"kafka"`
 	SecretKey string         `mapstructure:"secret_key"`
+	GRPC      GRPCConfig     `mapstructure:"grpc"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -111,6 +122,8 @@ func LoadConfig() (*Config, error) {
 	v.BindEnv("kafka.group_id", "KAFKA_GROUP_ID")
 
 	v.BindEnv("secret_key", "CREDENTIALS_SECRET")
+
+
 	var cfg Config
 
 	if err := v.Unmarshal(&cfg); err != nil {

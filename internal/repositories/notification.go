@@ -183,6 +183,31 @@ func (r *notificationRepository) GetContactByExternalUserAndChannel(ctx context.
 	}, nil
 }
 
+func (r *notificationRepository) GetWorkspaceOwners(ctx context.Context, workspaceID string) ([]core.Contact, error) {
+	emails, err := r.queries.GetWorkspaceOwnerEmails(ctx, utils.MustStringToUUID(workspaceID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workspace owners: %w", err)
+	}
+
+	var contacts []core.Contact
+	for _, email := range emails {
+		contacts = append(contacts, core.Contact{
+			ContactValue: email,
+			Channel:      "email",
+		})
+	}
+	return contacts, nil
+}
+
+func (r *notificationRepository) GetProductionEnvironmentID(ctx context.Context, workspaceID string) (string, error) {
+	id, err := r.queries.GetProductionEnvironmentByWorkspace(ctx, utils.MustStringToUUID(workspaceID))
+	if err != nil {
+		return "", fmt.Errorf("failed to get production environment: %w", err)
+	}
+
+	return utils.UUIDToString(id), nil
+}
+
 func (r *notificationRepository) GetPreferencesBySubscriberAndChannel(ctx context.Context, subscriberID, channel, eventType string) ([]core.Preference, error) {
 	rows, err := r.queries.GetPreferencesBySubscriberAndChannel(ctx, sqlc.GetPreferencesBySubscriberAndChannelParams{
 		SubscriberID: utils.MustStringToUUID(subscriberID),
@@ -218,6 +243,8 @@ func (r *notificationRepository) GetLayoutByID(ctx context.Context, layoutID, wo
 		HTML: layout.Html,
 	}, nil
 }
+
+
 
 // Mappers
 

@@ -51,20 +51,3 @@ func ConnectDB(cfg *Config) (*pgxpool.Pool, error) {
 }
 
 
-type no interface{
-	check()
-	run()
-}
-
-type server struct{
-}
-
-func (s *server)run(){}
-
-type client struct{
-	server
-}
-func (c *client)check()
-func (c *client)run()
-
-var now  no=&client{}

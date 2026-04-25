@@ -73,7 +73,7 @@ func TestRemoveMember(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			mRepo := new(mocks.WorkspaceRepository)
 
-			svc := NewWorkSpaceService(mRepo)
+			svc := NewWorkSpaceService(mRepo,nil)
 
 			mRepo.On("GetMemberRole", mock.Anything, sqlc.GetMemberRoleParams{
 				WorkspaceID: wspID,

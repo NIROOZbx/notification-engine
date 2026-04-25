@@ -102,12 +102,12 @@ type NotificationLog struct {
 	NextRetryAt     pgtype.Timestamptz `db:"next_retry_at" json:"next_retry_at"`
 	ErrorMessage    pgtype.Text        `db:"error_message" json:"error_message"`
 	TriggerData     []byte             `db:"trigger_data" json:"trigger_data"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type Plan struct {
 	ID                 pgtype.UUID        `db:"id" json:"id"`
 	Name               string             `db:"name" json:"name"`
-	NotifLimitMonth    int32              `db:"notif_limit_month" json:"notif_limit_month"`
 	MembersLimit       int32              `db:"members_limit" json:"members_limit"`
 	ApiKeysLimit       int32              `db:"api_keys_limit" json:"api_keys_limit"`
 	LogRetentionDays   int32              `db:"log_retention_days" json:"log_retention_days"`
@@ -118,6 +118,14 @@ type Plan struct {
 	UpdatedAt          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	MaxLayouts         int32              `db:"max_layouts" json:"max_layouts"`
 	MaxTemplates       int32              `db:"max_templates" json:"max_templates"`
+	EmailLimitMonth    int32              `db:"email_limit_month" json:"email_limit_month"`
+	SmsLimitMonth      int32              `db:"sms_limit_month" json:"sms_limit_month"`
+	PushLimitMonth     int32              `db:"push_limit_month" json:"push_limit_month"`
+	SlackLimitMonth    int32              `db:"slack_limit_month" json:"slack_limit_month"`
+	WhatsappLimitMonth int32              `db:"whatsapp_limit_month" json:"whatsapp_limit_month"`
+	WebhookLimitMonth  int32              `db:"webhook_limit_month" json:"webhook_limit_month"`
+	InAppLimitMonth    int32              `db:"in_app_limit_month" json:"in_app_limit_month"`
+	ExternalPriceID    pgtype.Text        `db:"external_price_id" json:"external_price_id"`
 }
 
 type Template struct {

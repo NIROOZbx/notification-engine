@@ -23,7 +23,6 @@ func NewScheduler(producer core.Producer, log zerolog.Logger, repo repositories.
 }
 
 func (s *Scheduler) pollScheduled(ctx context.Context) {
-	s.log.Debug().Msg("SCHEDULER_TICK: Checking for due notifications")
 	logs, err := s.repo.GetDueScheduledNotifications(ctx, 10)
 	if err != nil {
 		s.log.Error().Err(err).Msg("failed to fetch scheduled notifications")
@@ -33,7 +32,6 @@ func (s *Scheduler) pollScheduled(ctx context.Context) {
 }
 
 func (s *Scheduler) pollRetry(ctx context.Context) {
-	s.log.Debug().Msg("RETRY_TICK: Checking for due retries")
 	logs, err := s.repo.GetDueRetryNotifications(ctx, 10)
 	if err != nil {
 		s.log.Error().Err(err).Msg("failed to fetch retry notifications")
@@ -62,7 +60,9 @@ func (s *Scheduler) poll(ctx context.Context, logs []*core.NotificationLog) {
 		topic, err := queue.TopicByChannel(log.Channel)
 		if err != nil {
 			s.log.Error().Err(err).Str("log_id", log.ID).Msg("unsupported channel, marking as failed")
-			_ = s.repo.UpdateNotificationStatus(ctx, log.ID, "failed")
+			if err := s.repo.UpdateNotificationStatus(ctx, log.ID, "failed"); err != nil {
+				s.log.Error().Err(err).Str("log_id", log.ID).Msg("critical: ferror in updating status")
+			}
 			continue
 		}
 

@@ -1,1 +1,1 @@
-UPDATE plans SET is_active = false WHERE name IN ('free', 'pro', 'enterprise');
+UPDATE plans SET is_active = false WHERE name IN ('Free', 'Pro', 'Enterprise');

@@ -15,6 +15,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/engine/notification/sender/email"
 	"github.com/NIROOZbx/notification-engine/engine/notification/sender/sms"
 	"github.com/NIROOZbx/notification-engine/engine/notification/template"
+	"github.com/NIROOZbx/notification-engine/internal/billing"
 	"github.com/NIROOZbx/notification-engine/internal/handlers"
 	"github.com/NIROOZbx/notification-engine/internal/middleware"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
@@ -58,6 +59,8 @@ type RouterDeps struct {
 	TemplateHandler   *handlers.TemplateHandler
 	LayoutHandler     *handlers.LayoutHandler
 	ChnlConfigHandler *handlers.ChannelConfigHandler
+	PlanHandler       *handlers.PlanHandler
+	BillingHandler    *handlers.BillingHandler
 }
 
 func StartApp(cfg *config.Config) (*App, error) {
@@ -91,6 +94,11 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	httpClient := httpclient.NewClient()
 
+	billingClient, err := billing.NewGRPCClient(cfg.GRPC.GRPCPort)
+
+	if err != nil {
+		appLogger.Fatal().Err(err).Msg("failed to connect to billing service")
+	}
 	// ==========================================
 	// 2. REPOSITORIES & DATA STORES
 	// ==========================================
@@ -102,6 +110,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	usrRepo := repositories.NewUserRepository(repo)
 	wspRepo := repositories.NewWorkspaceRepository(repo, db)
 	chnlConfigRepo := repositories.NewChannelConfigRepo(repo, db)
+	planRepo := repositories.NewPlanRepository(repo)
 	subscriberRepo := repositories.NewSubscriberRepo(repo)
 	templateRepo := repositories.NewTemplateRepository(repo)
 	notifRepo := repositories.NewNotificationRepository(repo, chnlConfigRepo, templateRepo)
@@ -113,13 +122,15 @@ func StartApp(cfg *config.Config) (*App, error) {
 	// ==========================================
 
 	userService := services.NewUserService(usrRepo)
-	workspaceService := services.NewWorkSpaceService(wspRepo)
+	workspaceService := services.NewWorkSpaceService(wspRepo, billingClient)
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
 	subscriberSvc := services.NewSubscriberService(subscriberRepo)
 	templateSvc := services.NewTemplateService(templateRepo, layoutRepo)
 	layoutSvc := services.NewLayoutService(layoutRepo)
 	chnlConfigSvc := services.NewChannelConfigService(chnlConfigRepo, cfg.SecretKey)
+	planSvc := services.NewPlanService(planRepo)
+	billingSvc := services.NewBillingService(billingClient)
 
 	// ==========================================
 	//  ENGINE CONFIGURATION
@@ -129,7 +140,14 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	render := template.NewRenderer()
 
-	engine := core.NewEngine(notifRepo, producer, appLogger, render, cfg.SecretKey)
+	engine := core.NewEngine(core.EngineConfig{
+		Repo:          notifRepo,
+		Producer:      producer,
+		Log:           appLogger,
+		Renderer:      render,
+		SecretKey:     cfg.SecretKey,
+		BillingClient: billingClient,
+	})
 
 	setUpMockProviders(engine, appLogger)
 
@@ -154,6 +172,8 @@ func StartApp(cfg *config.Config) (*App, error) {
 	templateHandler := handlers.NewTemplateHandler(templateSvc, appLogger)
 	layoutHandler := handlers.NewLayoutHandler(layoutSvc, appLogger)
 	chnlConfigHandler := handlers.NewChannelConfigHandler(chnlConfigSvc, appLogger)
+	planHandler := handlers.NewPlanHandler(planSvc)
+	billingHandler := handlers.NewBillingHandler(billingSvc, userService, appLogger)
 
 	// ==========================================
 	// 5. FIBER SETUP & ROUTING
@@ -185,6 +205,8 @@ func StartApp(cfg *config.Config) (*App, error) {
 		TemplateHandler:   templateHandler,
 		LayoutHandler:     layoutHandler,
 		ChnlConfigHandler: chnlConfigHandler,
+		PlanHandler:       planHandler,
+		BillingHandler:    billingHandler,
 	}
 
 	SetUpRoutes(&r)
@@ -197,7 +219,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 		Consumer:  consumers,
 		Engine:    engine,
 		Scheduler: s,
-		Producer: producer,
+		Producer:  producer,
 		wg:        &sync.WaitGroup{},
 	}, nil
 }
@@ -217,7 +239,7 @@ func setUpConsumers(broker string, engine *core.Engine, groupID string, log zero
 
 	consumers := make(map[string]queue.Consumer)
 
-	topics := []string{queue.TopicSMS, queue.TopicEmail,queue.TopicDLQ}
+	topics := []string{queue.TopicSMS, queue.TopicEmail, queue.TopicDLQ,queue.TopicSystem}
 
 	for _, topic := range topics {
 		handler := engine.Process
