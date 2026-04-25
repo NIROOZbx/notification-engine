@@ -1,8 +1,6 @@
 # 🔔 Notification Engine
 
-> A robust, scalable backend service developed in Go, utilizing the **Fiber v3** framework for high-performance HTTP routing.
-
-The Notification Engine is designed to handle user authentication, workspace management, and notification dispatching across multiple environments and channels.
+> A production-grade, multi-tenant notification engine built in Go. Handles user, system, and scheduled notifications across multiple channels (Email, SMS) with a Kafka-backed async delivery pipeline, billing integration, and a strategy-based ingestion system.
 
 ---
 
@@ -10,54 +8,91 @@ The Notification Engine is designed to handle user authentication, workspace man
 
 | Component | Technology | Description |
 |-----------|------------|-------------|
-| **Language** | [Go (Golang)](https://golang.org/) | Core backend language |
-| **Framework** | [Fiber v3](https://docs.gofiber.io/) | High-performance HTTP web framework |
-| **Database** | PostgreSQL | Relational database (using `pgxpool`) |
-| **Caching/Sessions** | Redis | In-memory data store |
-| **ORM / Models** | [sqlc](https://sqlc.dev/) | Type-safe SQL code generation |
-| **Authentication** | OAuth2 + JWT | Google OAuth (`goth`), Stateless JWT Sessions |
+| **Language** | Go (Golang) | Core backend language |
+| **Framework** | Fiber v3 | High-performance HTTP web framework |
+| **Database** | PostgreSQL | Relational database (`pgxpool` + `sqlc`) |
+| **Cache / Sessions** | Redis | In-memory store for sessions and data |
+| **Message Queue** | Apache Kafka (KRaft) | Async notification delivery pipeline |
+| **Billing** | gRPC (Billing Service) | Usage tracking, quota enforcement, Stripe |
+| **Authentication** | OAuth2 + JWT | Google OAuth (`goth`), stateless JWT sessions |
 | **Logging** | `zerolog` | Structured, leveled JSON logging |
+| **Code Generation** | `sqlc` | Type-safe SQL code generation |
 
 ---
 
-## ✨ Features & Recent Updates
+## ✨ Features
 
-- **🔐 Multi-Strategy Authentication:** Fully functional Local Email/Password registration/login alongside Google OAuth integration. Built with BCrypt hashing and mitigations against enumerative timing-attacks.
-- **🛡️ Enhanced Security:**
-  - **Payload Validation** using `go-playground/validator/v10` to enforce strict constraints (e.g., email format, min/max lengths).
-  - **Rate Limiting** on authentication endpoints to automatically mitigate brute-force and DoS attempts.
-  - **Role-Based Access Control (RBAC):** Middleware to enforce `owner` and `admin` scopes on critical application routes.
-- **🔑 Secure API Key Management:**
-  - Rigorous scoping tying API keys to specific Workspaces and Environments to prevent IDOR vulnerabilities.
-  - Secure generation processes with unique prefixes (`ne_test_...`), hashed cryptographical storage, and sanitized key hints.
-  - Enforceable API Key expiration rules and seamless revocation toggles.
-- **🌐 Workspaces & Environments:** Supports isolated configurations per workspace (`development` / `production`) and seamlessly handles tiered subscription limits.
-- **⚡ Standardized Error Handling:** Centralized internal error management (`pkg/apperrors`) handling Postgres unique-constraint violations gently across the domain.
+### 🔔 Notification Engine
+- **Multi-Channel Delivery:** Email (SendGrid, AWS SES) and SMS (Twilio) with provider fallback.
+- **Strategy Pattern Ingestion:** Clean separation between `normalStrategy` (user-triggered) and `systemStrategy` (billing/system-generated alerts).
+- **System Notifications:** Billing and usage alerts bypass quota checks and opt-out rules, and are automatically routed to workspace owners.
+- **Scheduled Notifications:** Future-dated notifications are stored as `scheduled` and picked up by a background scheduler.
+- **Retry & DLQ:** Failed deliveries are retried with exponential backoff and terminated to a Dead Letter Queue after max attempts.
+- **Idempotency:** All notifications are deduplicated via idempotency keys, preventing duplicate sends.
+- **Template & Layout System:** Dynamic Handlebars-style template rendering with support for shared layouts.
+- **Provider Override:** Templates can override the default workspace provider per-channel.
+
+### 💳 Billing Integration (gRPC)
+- **Quota Enforcement:** Per-channel send limits checked before every notification dispatch.
+- **Usage Recording:** Tracks successful/failed sends per workspace for billing purposes.
+- **Subscription Lifecycle:** Expiry reminders and usage threshold alerts published to Kafka and routed to workspace owners.
+
+### 🔐 Security & Auth
+- **Multi-Strategy Auth:** Email/Password + Google OAuth with BCrypt hashing.
+- **Rate Limiting:** Brute-force protection on auth endpoints.
+- **RBAC Middleware:** Role-based access control (`owner` / `admin`) on critical routes.
+- **API Key Management:** Scoped API keys per workspace/environment with expiry and revocation.
+- **System Flag Protection:** `IsSystem` is internal-only — it cannot be spoofed via the public API.
 
 ---
 
-## 📂 Project Architecture
-
-This project follows a clean, highly decoupled architectural pattern, separating the core domain business logic from the HTTP transport layer and external infrastructure implementations.
+## 📂 Project Structure
 
 ```text
-├── pkg/                  # Shared libraries (JWT, Redis, Postgres, Logger, Errors)
-├── services/backend/
-│   ├── config/           # Application configuration mapping (Viper)
-│   ├── internal/
-│   │   ├── auth/         # Authentication domain (Handlers & Services)
-│   │   ├── user/         # User profile domain
-│   │   ├── workspace/    # Workspace management
-│   │   ├── api_keys/     # API Key generation, routing, and management
-│   │   ├── session/      # Redis-backed token blacklist & version tracking
-│   │   ├── middleware/   # Request interceptors (Auth, RBAC, Rate Limits)
-│   │   ├── dtos/         # Data Transfer Objects
-│   │   ├── db/           # Generated sqlc database code bindings
-│   │   └── utils/        # Generic utility helpers
-│   ├── app/              # Fiber App Initialization & API Router configuration
-│   └── cmd/              # Application entry points
-├── migrations/           # PostgreSQL schema scripts (up/down)
-└── deployments/          # Docker Compose and infrastructure files
+notification-engine/
+├── cmd/                        # Application entrypoint
+├── config/                     # Viper config + YAML
+├── consts/                     # Global constants (topics, statuses, etc.)
+├── db/
+│   ├── migration/              # PostgreSQL migrations (up/down)
+│   ├── query/                  # Raw SQL queries (sqlc input)
+│   └── sqlc/                   # sqlc-generated type-safe Go code
+├── deployments/
+│   └── docker-compose.yml      # Postgres, Redis, Kafka, Backend
+├── engine/
+│   └── notification/
+│       ├── core/               # Engine core (ingest, process, strategy)
+│       │   ├── engine.go       # Main engine: Ingest, Process, ingestSystem, ingestNormal
+│       │   ├── strategy.go     # Strategy pattern: normalStrategy, systemStrategy, ingestContext
+│       │   ├── repository.go   # Repository + Producer + Renderer interfaces
+│       │   └── types.go        # All DTOs and structs
+│       ├── models/             # Kafka event models and trigger payloads
+│       ├── provider/           # Provider interface + mock
+│       ├── queue/              # Kafka producer + consumer + topic definitions
+│       ├── scheduler/          # Background scheduler for future-dated notifications
+│       ├── sender/
+│       │   ├── email/          # SendGrid + SES providers
+│       │   └── sms/            # Twilio provider
+│       └── template/           # Go template renderer
+├── internal/
+│   ├── app/                    # Fiber app setup, routing, consumer/scheduler bootstrap
+│   ├── billing/                # gRPC billing client (CheckLimit, RecordUsage)
+│   ├── domain/                 # Core domain models
+│   ├── handlers/               # HTTP + gRPC handlers
+│   ├── middleware/             # Auth, API Key, RBAC middleware
+│   ├── repositories/           # Repository implementations
+│   ├── services/               # Business logic layer
+│   ├── session/                # Redis session store
+│   └── utils/                  # UUID helpers, locals, etc.
+├── pkg/
+│   ├── cache/                  # Redis client
+│   ├── conversion/             # pgtype/JSON helpers
+│   ├── encryptor/              # AES credential encryption
+│   ├── httpclient/             # Shared HTTP client
+│   ├── logger/                 # zerolog + lumberjack
+│   ├── response/               # HTTP response helpers
+│   └── validator/              # Request validation
+└── proto/                      # Protobuf definitions + generated gRPC code
 ```
 
 ---
@@ -66,15 +101,15 @@ This project follows a clean, highly decoupled architectural pattern, separating
 
 ### Prerequisites
 
-You will need the following installed:
-- **Go** (1.21+)
-- **Docker & Docker Compose** (for spinning up Postgres & Redis)
-- **sqlc** (for modifying queries)
-- **golang-migrate** (for running database migrations)
+- **Go** 1.21+
+- **Docker & Docker Compose**
+- **`sqlc`** — `go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`
+- **`golang-migrate`** — `go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest`
+- **Task** — `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ### 1. Environment Setup
 
-Copy `.env.example` to `.env` in the root of the project to define your local configurations:
+Copy `.env.example` to `.env` and fill in your values:
 
 ```env
 # Database
@@ -88,49 +123,98 @@ DB_NAME=notif_db
 REDIS_PASSWORD=secret
 REDIS_ADDR=localhost:6379
 
-# JWT Secrets
-ACCESS_SECRET=your_super_secret_access_key
-REFRESH_SECRET=your_super_secret_refresh_key
+# Kafka
+KAFKA_BROKER=localhost:9092
 
-# OAuth Config
+# JWT
+ACCESS_SECRET=your_access_secret
+REFRESH_SECRET=your_refresh_secret
+
+# OAuth
 CLIENT_ID=your_google_oauth_client_id
 CLIENT_SECRET=your_google_oauth_client_secret
 REDIRECT_URL=http://localhost:8080/api/v1/auth/google/callback
+
+# Billing gRPC
+GRPC_PORT=50051
+
+# Encryption
+SECRET_KEY=your_32_byte_aes_key
 ```
 
-### 2. Boot Infrastructure
-
-Start the PostgreSQL and Redis containers using Docker Compose:
+### 2. Start Infrastructure
 
 ```bash
-cd deployments
-docker-compose up -d
+task start
 ```
 
-### 3. Apply Migrations
+This will:
+1. Start Postgres, Redis, Kafka, and the backend via Docker Compose
+2. Run all pending database migrations
+3. Tail the backend logs
 
-Run your database migrations to set up the default schema:
+### 3. Individual Task Commands
 
-```bash
-migrate -path migrations -database "postgres://postgres:secret@localhost:5432/notif_db?sslmode=disable" up
-```
-
-### 4. Run the Backend Service
-
-Execute the main Go application from the `services/backend` directory:
-
-```bash
-cd services/backend
-go run cmd/main.go cmd/cmd.go
-```
-
-The application will start the Fiber web server.
-- **REST API Base URL:** `http://localhost:8080/api/v1`
+| Command | Description |
+|---------|-------------|
+| `task start` | Full boot: infra + migrate + logs |
+| `task up` | Start containers (no rebuild) |
+| `task build` | Rebuild and start containers |
+| `task down` | Stop all containers |
+| `task down-v` | Stop and wipe all volumes |
+| `task migrate-up` | Apply all pending migrations |
+| `task migrate-down` | Roll back migrations |
+| `task migrate-create -- <name>` | Create a new migration |
+| `task gen-sqlc` | Regenerate sqlc models |
+| `task gen-proto` | Regenerate gRPC proto files |
 
 ---
 
-## 📝 Scripts & Tasks
+## 🔄 Notification Flow
 
-If using a Taskfile, you can easily execute standard workflows like:
-- `task generate` - Regenerate `sqlc` models and queries.
-- `task run` - Start the local development server.
+### User-triggered (API)
+```
+POST /api/v1/notifications/trigger
+    → Engine.Ingest()
+    → normalStrategy (billing check + opt-out check)
+    → CreateNotificationLog (status: queued)
+    → Publish to Kafka (email/sms topic)
+    → Engine.Process() (consumer picks up)
+    → Provider.Send() (SendGrid / Twilio)
+    → RecordUsage (billing)
+```
+
+### System-triggered (Billing Service → Kafka)
+```
+Billing Service (cron/usage threshold)
+    → Publish to Kafka (notifications.system topic)
+    → Engine.Ingest() with IsSystem=true
+    → ingestSystem() → GetWorkspaceOwners()
+    → systemStrategy (skip billing + skip opt-out)
+    → CreateNotificationLog per owner
+    → Publish to Kafka (email topic)
+    → Engine.Process() → Provider.Send()
+```
+
+---
+
+## 📡 API Overview
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/auth/register` | Register a new user |
+| `POST` | `/api/v1/auth/login` | Login with email/password |
+| `GET` | `/api/v1/auth/google` | Google OAuth login |
+| `POST` | `/api/v1/notifications/trigger` | Trigger a notification |
+| `GET` | `/api/v1/notifications/:id` | Get notification log |
+| `POST` | `/api/v1/templates` | Create a template |
+| `POST` | `/api/v1/subscribers` | Create a subscriber |
+| `GET` | `/api/v1/subscribers/:id/preferences` | Get subscriber preferences |
+| `POST` | `/api/v1/channel-configs` | Configure a channel provider |
+| `POST` | `/api/v1/billing/checkout` | Create Stripe checkout session |
+
+---
+
+## 📝 License
+
+MIT
