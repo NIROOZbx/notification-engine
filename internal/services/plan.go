@@ -13,6 +13,15 @@ type PlanResponse struct {
 	ApiKeysLimit     int32  `json:"api_keys_limit"`
 	LogRetentionDays  int32  `json:"log_retention_days"`
 	PriceCents        int32  `json:"price_cents"`
+	ExternalPriceID   string `json:"external_price_id"`
+	EmailLimit        int32  `json:"email_limit"`
+	SMSLimit          int32  `json:"sms_limit"`
+	PushLimit         int32  `json:"push_limit"`
+	SlackLimit        int32  `json:"slack_limit"`
+	WhatsAppLimit     int32  `json:"whatsapp_limit"`
+	WebhookLimit      int32  `json:"webhook_limit"`
+	InAppLimit        int32  `json:"in_app_limit"`
+	OriginalPriceCents int32 `json:"original_price"`
 }
 
 type PlanService interface {
@@ -42,6 +51,15 @@ func (s *planService) GetAllPlans(ctx context.Context) ([]PlanResponse, error) {
 			ApiKeysLimit:    p.ApiKeysLimit,
 			LogRetentionDays: p.LogRetentionDays,
 			PriceCents:       p.PriceCents,
+			ExternalPriceID: p.ExternalPriceID.String,
+			EmailLimit:      p.EmailLimitMonth,
+			SMSLimit:        p.SmsLimitMonth,
+			PushLimit:       p.PushLimitMonth,
+			SlackLimit:      p.SlackLimitMonth,
+			WhatsAppLimit:   p.WhatsappLimitMonth,
+			WebhookLimit:    p.WebhookLimitMonth,
+			InAppLimit:      p.InAppLimitMonth,
+			OriginalPriceCents: p.OriginalPriceCents,
 		})
 	}
 	return resp, nil

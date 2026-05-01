@@ -24,6 +24,7 @@ type TemplateRepository interface {
 	List(ctx context.Context, workspaceID, envID pgtype.UUID) ([]*domain.Template, error)
 	Update(ctx context.Context, params domain.UpdateTemplateParams) (*domain.Template, error)
 	Delete(ctx context.Context, id, workspaceID pgtype.UUID) error
+	CountTemplates(ctx context.Context, workspaceID pgtype.UUID) (int64, error)
 	HasActiveChannels(ctx context.Context, templateID pgtype.UUID) (bool, error)
 	GetByEventType(ctx context.Context, workspaceID, envID pgtype.UUID, eventType string) (*domain.Template, error)
 	GetChannelByTemplateAndChannel(ctx context.Context, templateID pgtype.UUID, channel string) (*domain.TemplateChannel, error)
@@ -140,6 +141,10 @@ func (r *templateRepository) Delete(ctx context.Context, id, workspaceID pgtype.
 		return fmt.Errorf("db delete: %w", err)
 	}
 	return nil
+}
+
+func (r *templateRepository) CountTemplates(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	return r.queries.CountTemplates(ctx, workspaceID)
 }
 
 func (r *templateRepository) HasActiveChannels(ctx context.Context, templateID pgtype.UUID) (bool, error) {

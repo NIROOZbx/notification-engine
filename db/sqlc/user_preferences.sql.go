@@ -54,6 +54,50 @@ func (q *Queries) GetPreferencesBySubscriberAndChannel(ctx context.Context, arg 
 	return items, nil
 }
 
+const listUserPreferencesBySubscriber = `-- name: ListUserPreferencesBySubscriber :many
+SELECT up.id, up.workspace_id, up.environment_id, up.subscriber_id, up.channel, up.event_type, up.is_enabled, up.created_at, up.updated_at FROM user_preferences up
+JOIN user_info ui ON up.subscriber_id = ui.id
+WHERE ui.workspace_id = $1 
+  AND ui.environment_id = $2 
+  AND ui.external_user_id = $3
+`
+
+type ListUserPreferencesBySubscriberParams struct {
+	WorkspaceID    pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID  pgtype.UUID `db:"environment_id" json:"environment_id"`
+	ExternalUserID string      `db:"external_user_id" json:"external_user_id"`
+}
+
+func (q *Queries) ListUserPreferencesBySubscriber(ctx context.Context, arg ListUserPreferencesBySubscriberParams) ([]UserPreference, error) {
+	rows, err := q.db.Query(ctx, listUserPreferencesBySubscriber, arg.WorkspaceID, arg.EnvironmentID, arg.ExternalUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserPreference
+	for rows.Next() {
+		var i UserPreference
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.EnvironmentID,
+			&i.SubscriberID,
+			&i.Channel,
+			&i.EventType,
+			&i.IsEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertUserPreference = `-- name: UpsertUserPreference :one
 INSERT INTO user_preferences (
     workspace_id,

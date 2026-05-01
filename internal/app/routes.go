@@ -1,11 +1,14 @@
 package app
 
 import (
+	"github.com/NIROOZbx/notification-engine/config"
+	"github.com/NIROOZbx/notification-engine/internal/middleware"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
-func SetUpRoutes(r *RouterDeps) {
+func SetUpRoutes(r *RouterDeps, corsCfg *config.CORSConfig) {
+	r.App.Use(middleware.NewCORSMiddleware(corsCfg))
 	r.App.Use(recover.New())
 	r.App.Use(logger.New())
 
@@ -32,6 +35,8 @@ func SetUpRoutes(r *RouterDeps) {
 	current := api.Group("/workspaces/current", r.AuthMiddleware.Auth)
 
 	current.Get("/", r.WspHandler.GetCurrentWorkspace)
+	current.Get("/analytics", r.AnalyticsHandler.GetAnalytics)
+	current.Get("/analytics/logs", r.AnalyticsHandler.GetActivityLogs)
 	current.Patch("/", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateName)
 
 	// templates
@@ -54,7 +59,7 @@ func SetUpRoutes(r *RouterDeps) {
 	current.Patch("/layouts/:id", r.LayoutHandler.Update)
 	current.Delete("/layouts/:id", r.LayoutHandler.Delete)
 	current.Patch("/layouts/:id/default", r.LayoutHandler.SetDefault)
-	
+
 	// channel configs
 	current.Get("/channels", r.ChnlConfigHandler.List)
 	current.Post("/channels", r.ChnlConfigHandler.Create)
@@ -67,15 +72,17 @@ func SetUpRoutes(r *RouterDeps) {
 	current.Get("/members", r.WspHandler.GetWorkspaceMembers)
 	current.Patch("/members/:userID/role", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.UpdateMemberRole)
 	current.Delete("/members/:userID", r.AuthMiddleware.RequireRole("owner", "admin"), r.WspHandler.RemoveMember)
-	
+
 	// billing
 	current.Get("/usage", r.BillingHandler.GetUsage)
 	current.Get("/subscription", r.BillingHandler.GetSubscription)
 	current.Delete("/subscription", r.AuthMiddleware.RequireRole("owner", "admin"), r.BillingHandler.CancelSubscription)
 	current.Post("/checkout", r.AuthMiddleware.RequireRole("owner", "admin"), r.BillingHandler.CreateCheckout)
+	current.Get("/checkout/session", r.BillingHandler.GetCheckoutSession)
 
-
-
+	current.Get("/subscribers", r.SubscriberHandler.List)
+	current.Get("/subscribers/:externalUserId/preferences", r.SubscriberHandler.GetPreferences)
+	current.Delete("/subscribers/:id", r.SubscriberHandler.Delete)
 
 	apiKeys := current.Group("/api-keys")
 
@@ -90,8 +97,4 @@ func SetUpRoutes(r *RouterDeps) {
 	subscribers := api.Group("/identify", r.ApiKeyMiddleware.Authenticate)
 	subscribers.Post("/", r.SubscriberHandler.Identify)
 	subscribers.Post("/preferences", r.SubscriberHandler.UpsertPreference)
-		// subscribers
-	subscribers.Get("/subscribers", r.SubscriberHandler.List)
-	subscribers.Delete("/subscribers/:id", r.SubscriberHandler.Delete)
-
 }

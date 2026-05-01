@@ -38,6 +38,11 @@ func (h *BillingHandler) GetUsage(c fiber.Ctx) error {
 		return helpers.HandleServiceError(c, err, h.log)
 	}
 
+	h.log.Info().
+		Str("workspace_id", utils.UUIDToString(workspaceID)).
+		Str("env_id", utils.UUIDToString(envID)).
+		Msg("Workspace usage retrieved")
+
 	return response.OK(c, "Fetched usage successfully", usage)
 }
 
@@ -62,14 +67,25 @@ func (h *BillingHandler) CancelSubscription(c fiber.Ctx) error {
 	}
 
 	subscriptionID := c.Query("id")
+
 	if subscriptionID == "" {
 		return response.BadRequest(c, nil, "Subscription ID is required")
 	}
+
+	h.log.Info().
+		Str("workspace_id", utils.UUIDToString(workspaceID)).
+		Str("subscription_id", subscriptionID).
+		Msg("Attempting to cancel subscription")
 
 	err = h.billingSvc.CancelSubscription(c.Context(), utils.UUIDToString(workspaceID), subscriptionID)
 	if err != nil {
 		return helpers.HandleServiceError(c, err, h.log)
 	}
+
+	h.log.Info().
+		Str("workspace_id", utils.UUIDToString(workspaceID)).
+		Str("subscription_id", subscriptionID).
+		Msg("Subscription cancelled successfully")
 
 	return response.OK(c, "Subscription cancelled successfully", nil)
 }
@@ -98,5 +114,25 @@ func (h *BillingHandler) CreateCheckout(c fiber.Ctx) error {
 		return helpers.HandleServiceError(c, err, h.log)
 	}
 
+	h.log.Info().
+		Str("workspace_id", utils.UUIDToString(workspaceID)).
+		Str("plan_id", planID).
+		Str("email", userDetails.Email).
+		Msg("Checkout session created")
+
 	return response.OK(c, "Checkout link generated", url)
+}
+
+func (h *BillingHandler) GetCheckoutSession(c fiber.Ctx) error {
+	sessionID := c.Query("session_id")
+	if sessionID == "" {
+		return response.BadRequest(c, nil, "session_id is required")
+	}
+
+	details, err := h.billingSvc.GetCheckoutSession(c.Context(), sessionID)
+	if err != nil {
+		return helpers.HandleServiceError(c, err, h.log)
+	}
+
+	return response.OK(c, "Checkout session details retrieved", details)
 }

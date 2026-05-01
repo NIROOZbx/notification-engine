@@ -24,3 +24,11 @@ type Subscriber struct {
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 }
+
+type SubscriberList struct {
+	Subscribers []*Subscriber
+	TotalCount  int64
+	TotalPages  int32
+	CurrentPage int32
+	PageSize    int32
+}

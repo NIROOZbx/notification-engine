@@ -19,3 +19,10 @@ SELECT * FROM user_preferences
 WHERE subscriber_id = $1
   AND channel       = $2
   AND (event_type IS NULL OR event_type = $3);
+
+-- name: ListUserPreferencesBySubscriber :many
+SELECT up.* FROM user_preferences up
+JOIN user_info ui ON up.subscriber_id = ui.id
+WHERE ui.workspace_id = $1 
+  AND ui.environment_id = $2 
+  AND ui.external_user_id = $3;

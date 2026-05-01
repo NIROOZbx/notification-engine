@@ -13,12 +13,13 @@ import (
 )
 
 type UserHandler struct {
-	userSvc services.UserService
-	log     zerolog.Logger
+	userSvc      services.UserService
+	workspaceSvc services.WorkspaceService
+	log          zerolog.Logger
 }
 
-func NewUserHandler(svc services.UserService,log zerolog.Logger) *UserHandler {
-	return &UserHandler{userSvc: svc,log: log}
+func NewUserHandler(svc services.UserService, wspSvc services.WorkspaceService, log zerolog.Logger) *UserHandler {
+	return &UserHandler{userSvc: svc, workspaceSvc: wspSvc, log: log}
 }
 
 func (u *UserHandler) GetMe(c fiber.Ctx) error {
@@ -37,20 +38,31 @@ func (u *UserHandler) GetMe(c fiber.Ctx) error {
 		u.log.Error().Err(err).Interface("userID", userID).Msg("Database failure while fetching user profile")
 		return response.InternalServerError(c)
 	}
+	var envs []dtos.EnvironmentResponse
+	if row.WorkspaceID.Valid {
+		wsp, err := u.workspaceSvc.GetByID(c.Context(), row.WorkspaceID)
+		if err != nil {
+			u.log.Error().Err(err).Interface("workspaceID", row.WorkspaceID).Msg("Failed to fetch workspace for user profile")
+			return response.InternalServerError(c)
+		}
+		envs = wsp.Environments
+	}
+
 	res := dtos.AuthResponse{
-        User: dtos.UserDetails{
-            UserID:    row.UserID.String(),
-            Name:      row.FullName,
-            Email:     row.Email,
-            AvatarURL: row.AvatarUrl.String,
-        },
-        Workspace: &dtos.WorkSpaceDetails{
-            WorkspaceID:   row.WorkspaceID.String(),
-            WorkSpaceName: row.WorkspaceName,
-            Slug:          row.Slug,
-            Role:          row.Role,
-        },
-    }
+		User: dtos.UserDetails{
+			UserID:    row.UserID.String(),
+			Name:      row.FullName,
+			Email:     row.Email,
+			AvatarURL: row.AvatarUrl.String,
+		},
+		Workspace: &dtos.WorkSpaceDetails{
+			WorkspaceID:   row.WorkspaceID.String(),
+			WorkSpaceName: row.WorkspaceName,
+			Slug:          row.Slug,
+			Role:          row.Role,
+			Environments:  envs,
+		},
+	}
 
     return response.OK(c, "Profile fetched successfully", res)
 }

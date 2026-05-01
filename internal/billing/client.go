@@ -6,6 +6,7 @@ import (
 	"time"
 
 	billingv1 "github.com/NIROOZbx/notification-engine/proto"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -26,19 +27,18 @@ type SubscriptionResponse struct {
 	PaymentProvider  string
 }
 
+type ChannelUsage struct {
+	ChannelName  string `json:"channel_name"`
+	CurrentUsage int64  `json:"current_usage"`
+}
+
 type UsageResponse struct {
-	WorkspaceID        string    `json:"workspace_id"`
-	EnvironmentID      string    `json:"environment_id"`
-	EmailCount         int32     `json:"email_count"`
-	SMSCount           int32     `json:"sms_count"`
-	PushCount          int32     `json:"push_count"`
-	SlackCount         int32     `json:"slack_count"`
-	WhatsAppCount      int32     `json:"whatsapp_count"`
-	WebhookCount       int32     `json:"webhook_count"`
-	InAppCount         int32     `json:"in_app_count"`
-	PeriodStart        time.Time `json:"period_start"`
-	PeriodEnd          time.Time `json:"period_end"`
-	SubscriptionStatus string    `json:"subscription_status"`
+	WorkspaceID        string          `json:"workspace_id"`
+	EnvironmentID      string          `json:"environment_id"`
+	Usage              []*ChannelUsage `json:"usage"`
+	PeriodStart        time.Time       `json:"period_start"`
+	PeriodEnd          time.Time       `json:"period_end"`
+	SubscriptionStatus string          `json:"subscription_status"`
 }
 
 type RecordUsageInput struct {
@@ -50,6 +50,16 @@ type RecordUsageInput struct {
 	Success         bool
 }
 
+type CheckoutSessionDetails struct {
+	ID             string `json:"id"`
+	CustomerEmail  string `json:"customer_email"`
+	AmountTotal    int64  `json:"amount_total"`
+	Currency       string `json:"currency"`
+	PaymentStatus  string `json:"payment_status"`
+	PlanName       string `json:"plan_name"`
+	SubscriptionID string `json:"subscription_id"`
+}
+
 type Client interface {
 	CheckLimit(ctx context.Context, workspaceID, environmentID string, channel string) (*CheckLimitResponse, error)
 	RecordUsage(ctx context.Context, input RecordUsageInput) error
@@ -57,16 +67,18 @@ type Client interface {
 	GetSubscription(ctx context.Context, workspaceID string) (*SubscriptionResponse, error)
 	CancelSubscription(ctx context.Context, workspaceID, subscriptionID string) error
 	GetUsage(ctx context.Context, workspaceID, environmentID string) (*UsageResponse, error)
-	CreateCheckoutSession(ctx context.Context, workspaceID, planID,customerEmail string) (string, error)
+	CreateCheckoutSession(ctx context.Context, workspaceID, planID, customerEmail string) (string, error)
+	GetCheckoutSession(ctx context.Context, sessionID string) (*CheckoutSessionDetails, error)
 	Close() error
 }
 
 type grpcClient struct {
 	conn   *grpc.ClientConn
 	client billingv1.BillingServiceClient
+	log zerolog.Logger
 }
 
-func NewGRPCClient(addr string) (Client, error) {
+func NewGRPCClient(addr string,log zerolog.Logger) (Client, error) {
 	fmt.Println("grpc port", addr)
 	conn, err := grpc.NewClient("host.docker.internal:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -79,6 +91,7 @@ func NewGRPCClient(addr string) (Client, error) {
 	return &grpcClient{
 		conn:   conn,
 		client: billingClient,
+		log: log,
 	}, nil
 
 }
@@ -93,10 +106,9 @@ func (g *grpcClient) CheckLimit(ctx context.Context, workspaceID, environmentID 
 	if err != nil {
 		return nil, err
 	}
-	parsedTime, err := time.Parse(time.RFC3339, limit.ResetAt)
+	parsedTime, err := parseTime(limit.ResetAt)
 	if err != nil {
-
-		return nil, fmt.Errorf("Error parsing time: %v", err)
+		return nil, fmt.Errorf("error parsing reset_at: %w", err)
 	}
 
 	return &CheckLimitResponse{
@@ -140,10 +152,9 @@ func (g *grpcClient) GetSubscription(ctx context.Context, workspaceID string) (*
 		return nil, err
 	}
 
-	periodEnd, err := time.Parse(time.RFC3339, resp.CurrentPeriodEnd)
+	periodEnd, err := parseTime(resp.CurrentPeriodEnd)
 	if err != nil {
-
-		return nil, fmt.Errorf("Error parsing time: %v", err)
+		return nil, fmt.Errorf("error parsing current_period_end: %w", err)
 	}
 
 	return &SubscriptionResponse{
@@ -156,6 +167,7 @@ func (g *grpcClient) GetSubscription(ctx context.Context, workspaceID string) (*
 }
 
 func (g *grpcClient) CancelSubscription(ctx context.Context, workspaceID, subscriptionID string) error {
+
 	_, err := g.client.CancelSubscription(ctx, &billingv1.CancelSubscriptionRequest{
 		WorkspaceId:    workspaceID,
 		SubscriptionId: subscriptionID,
@@ -171,28 +183,45 @@ func (g *grpcClient) GetUsage(ctx context.Context, workspaceID, environmentID st
 	if err != nil {
 		return nil, err
 	}
+	g.log.Debug().
+    Str("period_start", resp.PeriodStart).
+    Str("period_end", resp.PeriodEnd).
+    Str("status", resp.SubscriptionStatus).
+    Msg("gRPC GetUsage response received")
 
-	periodStart, startErr := time.Parse(time.RFC3339, resp.PeriodStart)
-	periodEnd, err := time.Parse(time.RFC3339, resp.PeriodEnd)
+	periodStart, startErr := parseTime(resp.PeriodStart)
+	if startErr != nil {
+		return nil, fmt.Errorf("error parsing period_start: %w", startErr)
+	}
 
-	if err != nil || startErr != nil {
-		return nil, fmt.Errorf("Error parsing time: %v", err)
+	periodEnd, endErr := parseTime(resp.PeriodEnd)
+	if endErr != nil {
+		return nil, fmt.Errorf("error parsing period_end: %w", endErr)
+	}
+
+	usageList := make([]*ChannelUsage, len(resp.Usage))
+	for i, u := range resp.Usage {
+		usageList[i] = &ChannelUsage{
+			ChannelName:  u.ChannelName,
+			CurrentUsage: u.CurrentUsage,
+		}
 	}
 
 	return &UsageResponse{
 		WorkspaceID:        resp.WorkspaceId,
 		EnvironmentID:      resp.EnvironmentId,
-		EmailCount:         resp.EmailCount,
-		SMSCount:           resp.SmsCount,
-		PushCount:          resp.PushCount,
-		SlackCount:         resp.SlackCount,
-		WhatsAppCount:      resp.WhatsappCount,
-		WebhookCount:       resp.WebhookCount,
-		InAppCount:         resp.InAppCount,
+		Usage:              usageList,
 		PeriodStart:        periodStart,
 		PeriodEnd:          periodEnd,
 		SubscriptionStatus: resp.SubscriptionStatus,
 	}, nil
+}
+
+func parseTime(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, s)
 }
 
 func (g *grpcClient) CreateCheckoutSession(ctx context.Context, workspaceID, planID,customerEmail string) (string, error) {
@@ -209,4 +238,22 @@ func (g *grpcClient) CreateCheckoutSession(ctx context.Context, workspaceID, pla
 
 func (g *grpcClient) Close() error {
 	return g.conn.Close()
+}
+func (g *grpcClient) GetCheckoutSession(ctx context.Context, sessionID string) (*CheckoutSessionDetails, error) {
+    resp, err := g.client.GetCheckoutSession(ctx, &billingv1.CreateGetSessionRequest{
+        SessionId: sessionID,
+    })
+    if err != nil {
+        return nil, err
+    }
+
+    return &CheckoutSessionDetails{
+        ID:             resp.Id,
+        CustomerEmail:  resp.CustomerEmail,
+        AmountTotal:    resp.AmountTotal,
+        Currency:       resp.Currency,
+        PaymentStatus:  resp.PaymentStatus,
+        PlanName:       resp.PlanName,
+        SubscriptionID: resp.SubscriptionId,
+    }, nil
 }

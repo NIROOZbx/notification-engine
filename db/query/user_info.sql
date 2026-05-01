@@ -33,4 +33,10 @@ WHERE id = $1
 SELECT * FROM user_info
 WHERE workspace_id = $1
   AND environment_id = $2
-ORDER BY created_at DESC;
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4;
+
+-- name: CountSubscribers :one
+SELECT count(*) FROM user_info
+WHERE workspace_id = $1
+  AND environment_id = $2;

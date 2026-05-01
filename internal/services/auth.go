@@ -245,13 +245,13 @@ func mapToDTO(user *sqlc.User, wsp *dtos.WorkspaceResponse, role string) (*dtos.
 
 	dto := &dtos.AuthResponse{
 		User: dtos.UserDetails{
-			UserID:    userID,
-			Email:     user.Email,
-			Name:      user.FullName,
-			AvatarURL: avatarURL,
+			UserID:       userID,
+			Email:        user.Email,
+			Name:         user.FullName,
+			AvatarURL:    avatarURL,
+			HasWorkspace: wsp != nil,
 		},
 	}
-
 
 	if wsp != nil {
 		if wsp.ID == "" {
@@ -263,6 +263,7 @@ func mapToDTO(user *sqlc.User, wsp *dtos.WorkspaceResponse, role string) (*dtos.
 			WorkSpaceName: wsp.Name,
 			Slug:          wsp.Slug,
 			Role:          role,
+			Environments:  wsp.Environments,
 		}
 
 	}

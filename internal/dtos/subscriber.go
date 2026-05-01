@@ -37,3 +37,12 @@ type UserPreferenceResponse struct {
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
 }
+
+type SubscriberListResponse struct {
+	Subscribers []SubscriberResponse `json:"subscribers"`
+	TotalCount  int64               `json:"total_count"`
+	TotalPages  int32               `json:"total_pages"`
+	CurrentPage int32               `json:"current_page"`
+	PageSize    int32               `json:"page_size"`
+}
+

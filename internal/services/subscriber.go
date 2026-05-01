@@ -12,6 +12,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/conversion"
+	"golang.org/x/sync/errgroup"
 )
 
 type IdentifySubscriberInput struct {
@@ -36,14 +37,15 @@ type SubscriberService interface {
 	Identify(ctx context.Context, input IdentifySubscriberInput) (*domain.Subscriber, error)
 	UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*domain.UserPreference, error)
 	Delete(ctx context.Context, id, workspaceID string) error
-	List(ctx context.Context, workspaceID, environmentID string) ([]*domain.Subscriber, error)
+	List(ctx context.Context, workspaceID, environmentID string, page, pageSize int32) (*domain.SubscriberList, error)
+	GetPreferencesByExternalID(ctx context.Context, workspaceID, environmentID, externalUserID string) ([]*domain.UserPreference, error)
 }
 
 type subscriberService struct {
 	repo repositories.SubscriberRepo
 }
 
-func NewSubscriberService(repo repositories.SubscriberRepo) SubscriberService {
+func NewSubscriberService(repo repositories.SubscriberRepo) *subscriberService {
 	return &subscriberService{repo: repo}
 }
 
@@ -117,7 +119,14 @@ func (s *subscriberService) Delete(ctx context.Context, id, workspaceID string) 
 	return s.repo.DeleteSubscriber(ctx, idUUID, workspaceUUID)
 }
 
-func (s *subscriberService) List(ctx context.Context, workspaceID, environmentID string) ([]*domain.Subscriber, error) {
+func (s *subscriberService) List(ctx context.Context, workspaceID, environmentID string, page, pageSize int32) (*domain.SubscriberList, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
 	workspaceUUID, err := utils.StringToUUID(workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: workspace id", apperrors.ErrInvalidInput)
@@ -128,5 +137,52 @@ func (s *subscriberService) List(ctx context.Context, workspaceID, environmentID
 		return nil, fmt.Errorf("%w: environment id", apperrors.ErrInvalidInput)
 	}
 
-	return s.repo.ListSubscribers(ctx, workspaceUUID, envUUID)
+	g, gctx := errgroup.WithContext(ctx)
+
+	var subscribers []*domain.Subscriber
+	var totalCount int64
+
+	g.Go(func() error {
+		var err error
+		offset := (page - 1) * pageSize
+		subscribers, err = s.repo.ListSubscribers(gctx, workspaceUUID, envUUID, pageSize, offset)
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+		totalCount, err = s.repo.CountSubscribers(gctx, workspaceUUID, envUUID)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	totalPages := int32((totalCount + int64(pageSize) - 1) / int64(pageSize))
+
+	return &domain.SubscriberList{
+		Subscribers: subscribers,
+		TotalCount:  totalCount,
+		TotalPages:  totalPages,
+		CurrentPage: page,
+		PageSize:    pageSize,
+	}, nil
 }
+
+func (s *subscriberService) GetPreferencesByExternalID(ctx context.Context, workspaceID, environmentID, externalUserID string) ([]*domain.UserPreference, error) {
+	workspaceUUID, err := utils.StringToUUID(workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: workspace id", apperrors.ErrInvalidInput)
+	}
+
+	envUUID, err := utils.StringToUUID(environmentID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: environment id", apperrors.ErrInvalidInput)
+	}
+
+	return s.repo.ListPreferences(ctx, workspaceUUID, envUUID, externalUserID)
+}
+
+
+

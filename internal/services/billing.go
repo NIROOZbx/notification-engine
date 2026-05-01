@@ -10,7 +10,8 @@ type BillingService interface {
 	GetUsage(ctx context.Context, workspaceID, environmentID string) (*billing.UsageResponse, error)
 	GetSubscription(ctx context.Context, workspaceID string) (*billing.SubscriptionResponse, error)
 	CancelSubscription(ctx context.Context, workspaceID, subscriptionID string) error
-	CreateCheckoutSession(ctx context.Context, workspaceID, planID,customerEmail string) (string, error)
+	CreateCheckoutSession(ctx context.Context, workspaceID, planID, customerEmail string) (string, error)
+	GetCheckoutSession(ctx context.Context, sessionID string) (*billing.CheckoutSessionDetails, error)
 }
 
 type billingService struct {
@@ -37,4 +38,8 @@ func (s *billingService) CancelSubscription(ctx context.Context, workspaceID, su
 
 func (s *billingService) CreateCheckoutSession(ctx context.Context, workspaceID, planID,customerEmail string) (string, error) {
 	return s.billingClient.CreateCheckoutSession(ctx, workspaceID, planID,customerEmail)
+}
+
+func (s *billingService) GetCheckoutSession(ctx context.Context, sessionID string) (*billing.CheckoutSessionDetails, error) {
+	return s.billingClient.GetCheckoutSession(ctx, sessionID)
 }

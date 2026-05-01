@@ -23,7 +23,8 @@ type WorkspaceRepository interface {
 	UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.WorkspaceMember, error)
 	DeleteWorkspaceMember(ctx context.Context, arg sqlc.DeleteWorkspaceMemberParams) error
 	GetOwnerCount(ctx context.Context,workspaceID pgtype.UUID)(int64,error)
-    GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanNameRow, error)
+    GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error)
+	GetEnvironmentsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.Environment, error)
 
 	Atomic(ctx context.Context, fn func(repo WorkspaceRepository) error) error
 }
@@ -40,8 +41,8 @@ func NewWorkspaceRepository(queries *sqlc.Queries, pool *pgxpool.Pool) Workspace
 func (r *workspaceRepo) GetWorkspaceMemberByUserID(ctx context.Context, userID pgtype.UUID) (sqlc.WorkspaceMember, error) {
 	return r.queries.GetWorkspaceMemberByUserID(ctx, userID)
 }
-func (r *workspaceRepo) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanNameRow, error) {
-	return r.queries.GetWorkspaceWithPlanName(ctx, id)
+func (r *workspaceRepo) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error) {
+	return r.queries.GetWorkspaceWithPlan(ctx, id)
 }
 
 
@@ -109,4 +110,8 @@ func (r *workspaceRepo) DeleteWorkspaceMember(ctx context.Context, arg sqlc.Dele
 func (r *workspaceRepo)GetOwnerCount(ctx context.Context,workspaceID pgtype.UUID)(int64,error){
 
 	return r.queries.CountOwners(ctx,workspaceID)
+}
+
+func (r *workspaceRepo) GetEnvironmentsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.Environment, error) {
+	return r.queries.GetEnvironmentsByWorkspace(ctx, workspaceID)
 }

@@ -20,6 +20,7 @@ type LayoutRepo interface {
 	UpdateLayout(ctx context.Context, params domain.UpdateLayoutParams) (*domain.Layout, error)
 	DeleteLayout(ctx context.Context, id, workspaceID pgtype.UUID) error
 	SetLayoutDefault(ctx context.Context, id, workspaceID pgtype.UUID) error
+	CountLayouts(ctx context.Context, workspaceID pgtype.UUID) (int64, error)
 }
 
 func NewLayoutRepo(queries *sqlc.Queries) *layoutRepo {
@@ -126,6 +127,10 @@ func (l *layoutRepo) SetLayoutDefault(ctx context.Context, id, workspaceID pgtyp
 		return apperrors.MapDBError(err)
 	}
 	return nil
+}
+
+func (l *layoutRepo) CountLayouts(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	return l.queries.CountLayouts(ctx, workspaceID)
 }
 
 func mapToLayout(layout sqlc.Layout) *domain.Layout {

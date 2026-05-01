@@ -32,7 +32,7 @@ type AuthMiddleware interface {
 	RequireRole(allowedRoles ...string) fiber.Handler
 }
 
-const nilUUID = "00000000-0000-0000-0000-000000000000"
+const gracePeriod = 5 * time.Second
 
 func (a *authMiddleware) Auth(c fiber.Ctx) error {
 
@@ -58,22 +58,22 @@ func (a *authMiddleware) Auth(c fiber.Ctx) error {
 		return response.InternalServerError(c)
 	}
 	envIDStr := c.Get("X-Environment-ID")
-    if envIDStr != "" {
-        var envID pgtype.UUID
-        if err := envID.Scan(envIDStr); err != nil {
-            return response.BadRequest(c, nil, "invalid environment id")
-        }
+	if envIDStr != "" {
+		var envID pgtype.UUID
+		if err := envID.Scan(envIDStr); err != nil {
+			return response.BadRequest(c, nil, "invalid environment id")
+		}
 
-        env, err := a.repo.GetEnvironmentByID(c.Context(), envID)
-        if err != nil {
-            return response.Forbidden(c, nil, "invalid environment")
-        }
-        if env.WorkspaceID != workspaceID {
-            return response.Forbidden(c, nil, "environment does not belong to this workspace")
-        }
+		env, err := a.repo.GetEnvironmentByID(c.Context(), envID)
+		if err != nil {
+			return response.Forbidden(c, nil, "invalid environment")
+		}
+		if env.WorkspaceID != workspaceID {
+			return response.Forbidden(c, nil, "environment does not belong to this workspace")
+		}
 
-        c.Locals(consts.ENVID, envID)
-    }
+		c.Locals(consts.ENVID, envID)
+	}
 
 	c.Locals(consts.UID, userID)
 	c.Locals(consts.WID, workspaceID)
@@ -135,7 +135,7 @@ func (a *authMiddleware) validate(c fiber.Ctx) (*jwt.AccessClaims, error) {
 
 	if err != nil {
 		a.log.Debug().Err(err).Msg("access token invalid, attempting recovery via refresh")
-        return a.silentRefresh(c)
+		return a.silentRefresh(c)
 	}
 	version, verErr := a.store.GetTokenVersion(c.Context(), claims.UserID)
 	if verErr != nil {
@@ -163,6 +163,7 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 	refreshClaims, err := jwt.ParseRefreshToken(token, []byte(a.cfg.RefreshTokenSecret))
 
 	if err != nil {
+		a.log.Warn().Err(err).Msg("failed to parse refresh token during silent refresh")
 		jwt.ClearTokenCookies(c)
 		return nil, apperrors.ErrUnauthorized
 	}
@@ -178,25 +179,28 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 		return nil, apperrors.ErrUnauthorized
 	}
 
-	blacklisted, err := a.store.IsRefreshBlacklisted(c.Context(), refreshClaims.TokenID)
+	blacklistedAt, err := a.store.IsRefreshBlacklisted(c.Context(), refreshClaims.TokenID)
 
 	if err != nil {
 		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("redis down during blacklist check")
+		return nil, apperrors.ErrInternal
 	}
-
-	if blacklisted {
-		a.log.Warn().Str("userID", refreshClaims.UserID).Str("tokenID", refreshClaims.TokenID).Msg("refresh token is blacklisted")
+	if !blacklistedAt.IsZero() && time.Since(blacklistedAt) <= gracePeriod{
+			a.log.Warn().Str("userID", refreshClaims.UserID).Str("tokenID", refreshClaims.TokenID).Msg("refresh token is blacklisted")
 		a.store.UpgradeTokenVersion(c.Context(), refreshClaims.UserID)
 		jwt.ClearTokenCookies(c)
 		return nil, apperrors.ErrUnauthorized
 	}
 
-	if err := a.store.BlackListRefreshToken(c.Context(), refreshClaims.TokenID, refreshClaims.ExpiresAt.Time); err != nil {
+	if err := a.store.BlackListRefreshToken(c.Context(), refreshClaims.TokenID, refreshClaims.IssuedAt.Time); err != nil {
 		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("failed to blacklist token")
 	}
-	newVer, _ := a.store.GetTokenVersion(c.Context(), refreshClaims.UserID)
+	newVer, err := a.store.GetTokenVersion(c.Context(), refreshClaims.UserID)
+	if err != nil {
+		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("failed to fetch token version during silent refresh")
+	}
 
-	isOnboarded := authCtx.WorkspaceID.String() != nilUUID
+	isOnboarded := authCtx.WorkspaceID.String() != consts.FallBackUUID
 
 	payload := &jwt.TokenPayload{
 		Role:        authCtx.Role,
@@ -210,6 +214,7 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 
 	pair, err := jwt.GenerateTokenPair(jwtConfig, *payload)
 	if err != nil {
+		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("failed to generate token pair during silent refresh")
 		return nil, err
 	}
 	expiry := time.Duration(a.cfg.RefreshExpiryHours) * time.Hour
@@ -220,6 +225,11 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 	isProd := a.cfg.Environment == "production"
 
 	jwt.SetTokenCookies(c, pair, a.cfg.AccessExpiryMinutes, a.cfg.RefreshExpiryHours, isProd)
+
+	a.log.Info().
+		Str("userID", refreshClaims.UserID).
+		Str("workspaceID", authCtx.WorkspaceID.String()).
+		Msg("tokens issued successfully during silent refresh")
 
 	return jwt.ParseAccessToken(pair.AccessToken, []byte(a.cfg.AccessTokenSecret))
 

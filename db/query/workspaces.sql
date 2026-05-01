@@ -46,8 +46,16 @@ WHERE id = $1
 RETURNING *;
 
 -- name: GetWorkspaceWithPlan :one
-
-SELECT w.id, w.plan_id, p.api_keys_limit
+SELECT 
+    w.id, 
+    w.name, 
+    w.slug, 
+    p.name as plan_name,
+    w.created_at,
+    w.plan_id, 
+    p.api_keys_limit, 
+    p.max_templates, 
+    p.max_layouts
 FROM workspaces w
 JOIN plans p ON p.id = w.plan_id
 WHERE w.id = $1;

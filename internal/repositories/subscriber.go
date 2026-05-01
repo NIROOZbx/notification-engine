@@ -16,14 +16,16 @@ type SubscriberRepo interface {
 	UpsertPreference(ctx context.Context, params sqlc.UpsertUserPreferenceParams) (*domain.UserPreference, error)
 	GetSubscriberByExternalIDAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*domain.Subscriber, error)
 	DeleteSubscriber(ctx context.Context, id, workspaceID pgtype.UUID) error
-	ListSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID) ([]*domain.Subscriber, error)
+	ListSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID, limit, offset int32) ([]*domain.Subscriber, error)
+	CountSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID) (int64, error)
+	ListPreferences(ctx context.Context, workspaceID, environmentID pgtype.UUID, externalUserID string) ([]*domain.UserPreference, error)
 }
 
 type subscriberRepo struct {
 	db *sqlc.Queries
 }
 
-func NewSubscriberRepo(db *sqlc.Queries) SubscriberRepo {
+func NewSubscriberRepo(db *sqlc.Queries) *subscriberRepo {
 	return &subscriberRepo{db: db}
 }
 
@@ -66,10 +68,12 @@ func (r *subscriberRepo) DeleteSubscriber(ctx context.Context, id, workspaceID p
 	})
 }
 
-func (r *subscriberRepo) ListSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID) ([]*domain.Subscriber, error) {
+func (r *subscriberRepo) ListSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID, limit, offset int32) ([]*domain.Subscriber, error) {
 	rows, err := r.db.ListSubscribers(ctx, sqlc.ListSubscribersParams{
 		WorkspaceID:   workspaceID,
 		EnvironmentID: environmentID,
+		Limit:         limit,
+		Offset:        offset,
 	})
 	if err != nil {
 		return nil, err
@@ -82,6 +86,34 @@ func (r *subscriberRepo) ListSubscribers(ctx context.Context, workspaceID, envir
 
 	return subscribers, nil
 }
+
+func (r *subscriberRepo) CountSubscribers(ctx context.Context, workspaceID, environmentID pgtype.UUID) (int64, error) {
+	return r.db.CountSubscribers(ctx, sqlc.CountSubscribersParams{
+		WorkspaceID:   workspaceID,
+		EnvironmentID: environmentID,
+	})
+}
+
+func (r *subscriberRepo) ListPreferences(ctx context.Context, workspaceID, environmentID pgtype.UUID, externalUserID string) ([]*domain.UserPreference, error) {
+	rows, err := r.db.ListUserPreferencesBySubscriber(ctx, sqlc.ListUserPreferencesBySubscriberParams{
+		WorkspaceID:    workspaceID,
+		EnvironmentID:  environmentID,
+		ExternalUserID: externalUserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	prefs := make([]*domain.UserPreference, len(rows))
+	for i, row := range rows {
+		prefs[i] = mapToUserPreference(row)
+	}
+
+	return prefs, nil
+}
+
+
+
 
 func mapToSubscriber(row sqlc.UserInfo) *domain.Subscriber {
 	var metadata map[string]any

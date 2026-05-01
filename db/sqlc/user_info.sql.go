@@ -11,6 +11,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countSubscribers = `-- name: CountSubscribers :one
+SELECT count(*) FROM user_info
+WHERE workspace_id = $1
+  AND environment_id = $2
+`
+
+type CountSubscribersParams struct {
+	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID pgtype.UUID `db:"environment_id" json:"environment_id"`
+}
+
+func (q *Queries) CountSubscribers(ctx context.Context, arg CountSubscribersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubscribers, arg.WorkspaceID, arg.EnvironmentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteUserContactInfo = `-- name: DeleteUserContactInfo :exec
 DELETE FROM user_info
 WHERE id = $1
@@ -70,15 +88,23 @@ SELECT id, workspace_id, environment_id, external_user_id, channel, contact_valu
 WHERE workspace_id = $1
   AND environment_id = $2
 ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
 `
 
 type ListSubscribersParams struct {
 	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
 	EnvironmentID pgtype.UUID `db:"environment_id" json:"environment_id"`
+	Limit         int32       `db:"limit" json:"limit"`
+	Offset        int32       `db:"offset" json:"offset"`
 }
 
 func (q *Queries) ListSubscribers(ctx context.Context, arg ListSubscribersParams) ([]UserInfo, error) {
-	rows, err := q.db.Query(ctx, listSubscribers, arg.WorkspaceID, arg.EnvironmentID)
+	rows, err := q.db.Query(ctx, listSubscribers,
+		arg.WorkspaceID,
+		arg.EnvironmentID,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}

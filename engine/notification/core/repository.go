@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+
+)
 
 type Repository interface {
 	GetTemplateByEventType(ctx context.Context, workspaceID, envID, eventType string) (*Template, error)
@@ -12,6 +15,7 @@ type Repository interface {
 	GetNotificationLogByIdempotencyKey(ctx context.Context, key string) (*NotificationLog, error)
 	UpdateNotificationLog(ctx context.Context, params UpdateNotificationLogParams) error
 	UpdateNotificationStatus(ctx context.Context, id string, status string) error
+	UpdateProviderMessageID(ctx context.Context, id string, providerMessageID string) error
 	InsertNotificationAttempt(ctx context.Context, params CreateAttemptParams) error
 	GetActiveChannelsByTemplateID(ctx context.Context, templateID string) ([]TemplateChannel, error)
 	GetTemplateChannel(ctx context.Context, templateID, channel string) (*TemplateChannel, error)

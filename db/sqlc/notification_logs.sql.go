@@ -12,11 +12,12 @@ import (
 )
 
 const getDueRetryNotifications = `-- name: GetDueRetryNotifications :many
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
+FROM notification_logs
 WHERE status = 'retrying'
-AND next_retry_at IS NOT NULL
-AND next_retry_at <= NOW()
-FOR UPDATE SKIP LOCKED
+    AND next_retry_at IS NOT NULL
+    AND next_retry_at <= NOW() FOR
+UPDATE SKIP LOCKED
 LIMIT $1
 `
 
@@ -51,6 +52,11 @@ func (q *Queries) GetDueRetryNotifications(ctx context.Context, limit int32) ([]
 			&i.ErrorMessage,
 			&i.TriggerData,
 			&i.UpdatedAt,
+			&i.DeliveryStatus,
+			&i.DeliveredAt,
+			&i.FailedAt,
+			&i.ProviderMessageID,
+			&i.ProviderResponse,
 		); err != nil {
 			return nil, err
 		}
@@ -63,11 +69,12 @@ func (q *Queries) GetDueRetryNotifications(ctx context.Context, limit int32) ([]
 }
 
 const getDueScheduledNotifications = `-- name: GetDueScheduledNotifications :many
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
+FROM notification_logs
 WHERE status = 'scheduled'
-AND scheduled_at IS NOT NULL
-AND scheduled_at <= NOW()
-FOR UPDATE SKIP LOCKED
+    AND scheduled_at IS NOT NULL
+    AND scheduled_at <= NOW() FOR
+UPDATE SKIP LOCKED
 LIMIT $1
 `
 
@@ -102,6 +109,11 @@ func (q *Queries) GetDueScheduledNotifications(ctx context.Context, limit int32)
 			&i.ErrorMessage,
 			&i.TriggerData,
 			&i.UpdatedAt,
+			&i.DeliveryStatus,
+			&i.DeliveredAt,
+			&i.FailedAt,
+			&i.ProviderMessageID,
+			&i.ProviderResponse,
 		); err != nil {
 			return nil, err
 		}
@@ -114,7 +126,8 @@ func (q *Queries) GetDueScheduledNotifications(ctx context.Context, limit int32)
 }
 
 const getNotificationLogByID = `-- name: GetNotificationLogByID :one
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
+FROM notification_logs
 WHERE id = $1
 `
 
@@ -143,12 +156,18 @@ func (q *Queries) GetNotificationLogByID(ctx context.Context, id pgtype.UUID) (N
 		&i.ErrorMessage,
 		&i.TriggerData,
 		&i.UpdatedAt,
+		&i.DeliveryStatus,
+		&i.DeliveredAt,
+		&i.FailedAt,
+		&i.ProviderMessageID,
+		&i.ProviderResponse,
 	)
 	return i, err
 }
 
 const getNotificationLogByIdempotencyKey = `-- name: GetNotificationLogByIdempotencyKey :one
-SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at FROM notification_logs
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
+FROM notification_logs
 WHERE idempotency_key = $1
 `
 
@@ -177,28 +196,85 @@ func (q *Queries) GetNotificationLogByIdempotencyKey(ctx context.Context, idempo
 		&i.ErrorMessage,
 		&i.TriggerData,
 		&i.UpdatedAt,
+		&i.DeliveryStatus,
+		&i.DeliveredAt,
+		&i.FailedAt,
+		&i.ProviderMessageID,
+		&i.ProviderResponse,
+	)
+	return i, err
+}
+
+const getNotificationLogByProviderMessageID = `-- name: GetNotificationLogByProviderMessageID :one
+SELECT id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
+FROM notification_logs
+WHERE provider_message_id = $1
+`
+
+func (q *Queries) GetNotificationLogByProviderMessageID(ctx context.Context, providerMessageID pgtype.Text) (NotificationLog, error) {
+	row := q.db.QueryRow(ctx, getNotificationLogByProviderMessageID, providerMessageID)
+	var i NotificationLog
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EnvironmentID,
+		&i.TemplateID,
+		&i.ExternalUserID,
+		&i.EventType,
+		&i.Channel,
+		&i.Status,
+		&i.RenderedContent,
+		&i.IdempotencyKey,
+		&i.AttemptCount,
+		&i.IsTest,
+		&i.QueuedAt,
+		&i.Recipient,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.ScheduledAt,
+		&i.NextRetryAt,
+		&i.ErrorMessage,
+		&i.TriggerData,
+		&i.UpdatedAt,
+		&i.DeliveryStatus,
+		&i.DeliveredAt,
+		&i.FailedAt,
+		&i.ProviderMessageID,
+		&i.ProviderResponse,
 	)
 	return i, err
 }
 
 const insertNotificationLog = `-- name: InsertNotificationLog :one
 INSERT INTO notification_logs (
-    workspace_id,
-    environment_id,
-    template_id,
-    external_user_id,
-    event_type,
-    channel,
-    recipient,
-    idempotency_key,
-    is_test,
-    scheduled_at,
-    trigger_data,
-    status
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-)
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at
+        workspace_id,
+        environment_id,
+        template_id,
+        external_user_id,
+        event_type,
+        channel,
+        recipient,
+        idempotency_key,
+        is_test,
+        scheduled_at,
+        trigger_data,
+        status
+    )
+VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12
+    )
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
 `
 
 type InsertNotificationLogParams struct {
@@ -254,22 +330,59 @@ func (q *Queries) InsertNotificationLog(ctx context.Context, arg InsertNotificat
 		&i.ErrorMessage,
 		&i.TriggerData,
 		&i.UpdatedAt,
+		&i.DeliveryStatus,
+		&i.DeliveredAt,
+		&i.FailedAt,
+		&i.ProviderMessageID,
+		&i.ProviderResponse,
 	)
 	return i, err
 }
 
+const updateDeliveryStatusByProviderID = `-- name: UpdateDeliveryStatusByProviderID :exec
+UPDATE notification_logs
+SET delivery_status = $2,
+    delivered_at = CASE
+        WHEN $2 = 'delivered' THEN $3
+        ELSE NULL
+    END,
+    failed_at = CASE
+        WHEN $2 IN ('failed', 'bounced') THEN $3
+        ELSE NULL
+    END,
+    provider_response = $4,
+    updated_at = NOW()
+WHERE provider_message_id = $1
+`
+
+type UpdateDeliveryStatusByProviderIDParams struct {
+	ProviderMessageID pgtype.Text        `db:"provider_message_id" json:"provider_message_id"`
+	DeliveryStatus    pgtype.Text        `db:"delivery_status" json:"delivery_status"`
+	DeliveredAt       pgtype.Timestamptz `db:"delivered_at" json:"delivered_at"`
+	ProviderResponse  pgtype.Text        `db:"provider_response" json:"provider_response"`
+}
+
+func (q *Queries) UpdateDeliveryStatusByProviderID(ctx context.Context, arg UpdateDeliveryStatusByProviderIDParams) error {
+	_, err := q.db.Exec(ctx, updateDeliveryStatusByProviderID,
+		arg.ProviderMessageID,
+		arg.DeliveryStatus,
+		arg.DeliveredAt,
+		arg.ProviderResponse,
+	)
+	return err
+}
+
 const updateNotificationLog = `-- name: UpdateNotificationLog :one
 UPDATE notification_logs
-SET
-    status           = $2,
+SET status = $2,
     rendered_content = $3,
-    attempt_count    = $4,
-    sent_at          = $5,
-    next_retry_at    = $6,
-    error_message    = $7,
-    updated_at       = NOW()
+    attempt_count = $4,
+    sent_at = $5,
+    next_retry_at = $6,
+    error_message = $7,
+    updated_at = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
 `
 
 type UpdateNotificationLogParams struct {
@@ -315,17 +428,21 @@ func (q *Queries) UpdateNotificationLog(ctx context.Context, arg UpdateNotificat
 		&i.ErrorMessage,
 		&i.TriggerData,
 		&i.UpdatedAt,
+		&i.DeliveryStatus,
+		&i.DeliveredAt,
+		&i.FailedAt,
+		&i.ProviderMessageID,
+		&i.ProviderResponse,
 	)
 	return i, err
 }
 
 const updateNotificationStatus = `-- name: UpdateNotificationStatus :one
 UPDATE notification_logs
-SET 
-    status = $2,
+SET status = $2,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at
+RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
 `
 
 type UpdateNotificationStatusParams struct {
@@ -358,6 +475,30 @@ func (q *Queries) UpdateNotificationStatus(ctx context.Context, arg UpdateNotifi
 		&i.ErrorMessage,
 		&i.TriggerData,
 		&i.UpdatedAt,
+		&i.DeliveryStatus,
+		&i.DeliveredAt,
+		&i.FailedAt,
+		&i.ProviderMessageID,
+		&i.ProviderResponse,
 	)
 	return i, err
+}
+
+const updateProviderMessageID = `-- name: UpdateProviderMessageID :exec
+UPDATE notification_logs
+SET provider_message_id = $2,
+    status = 'sent',
+    delivery_status = 'sent',
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateProviderMessageIDParams struct {
+	ID                pgtype.UUID `db:"id" json:"id"`
+	ProviderMessageID pgtype.Text `db:"provider_message_id" json:"provider_message_id"`
+}
+
+func (q *Queries) UpdateProviderMessageID(ctx context.Context, arg UpdateProviderMessageIDParams) error {
+	_, err := q.db.Exec(ctx, updateProviderMessageID, arg.ID, arg.ProviderMessageID)
+	return err
 }

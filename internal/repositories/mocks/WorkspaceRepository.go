@@ -174,6 +174,36 @@ func (_m *WorkspaceRepository) FindWorkspaceByID(ctx context.Context, id pgtype.
 	return r0, r1
 }
 
+// GetEnvironmentsByWorkspace provides a mock function with given fields: ctx, workspaceID
+func (_m *WorkspaceRepository) GetEnvironmentsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.Environment, error) {
+	ret := _m.Called(ctx, workspaceID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetEnvironmentsByWorkspace")
+	}
+
+	var r0 []sqlc.Environment
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) ([]sqlc.Environment, error)); ok {
+		return rf(ctx, workspaceID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) []sqlc.Environment); ok {
+		r0 = rf(ctx, workspaceID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]sqlc.Environment)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, pgtype.UUID) error); ok {
+		r1 = rf(ctx, workspaceID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetMemberRole provides a mock function with given fields: ctx, arg
 func (_m *WorkspaceRepository) GetMemberRole(ctx context.Context, arg sqlc.GetMemberRoleParams) (string, error) {
 	ret := _m.Called(ctx, arg)
@@ -317,22 +347,22 @@ func (_m *WorkspaceRepository) GetWorkspaceMembers(ctx context.Context, workspac
 }
 
 // GetWorkspaceWithPlan provides a mock function with given fields: ctx, id
-func (_m *WorkspaceRepository) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanNameRow, error) {
+func (_m *WorkspaceRepository) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error) {
 	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetWorkspaceWithPlan")
 	}
 
-	var r0 sqlc.GetWorkspaceWithPlanNameRow
+	var r0 sqlc.GetWorkspaceWithPlanRow
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) (sqlc.GetWorkspaceWithPlanNameRow, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error)); ok {
 		return rf(ctx, id)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) sqlc.GetWorkspaceWithPlanNameRow); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) sqlc.GetWorkspaceWithPlanRow); ok {
 		r0 = rf(ctx, id)
 	} else {
-		r0 = ret.Get(0).(sqlc.GetWorkspaceWithPlanNameRow)
+		r0 = ret.Get(0).(sqlc.GetWorkspaceWithPlanRow)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, pgtype.UUID) error); ok {

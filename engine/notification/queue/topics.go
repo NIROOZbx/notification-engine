@@ -13,6 +13,8 @@ const (
 	TopicRetry    = "notifications.retry"
 	TopicDLQ      = "notifications.dlq"
 	TopicSystem ="system.notifications"
+	TopicWebhooksOutbound="webhooks.outbound"
+
 )
 
 func TopicByChannel(channel string) (string, error) {

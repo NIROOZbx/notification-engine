@@ -7,11 +7,17 @@ type UpdateMemberRoleRequest struct {
 }
 
 type WorkspaceResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	PlanName  string    `json:"plan_name"` 
-	CreatedAt time.Time `json:"created_at"`
+	ID           string                `json:"id"`
+	Name         string                `json:"name"`
+	Slug         string                `json:"slug"`
+	PlanName     string                `json:"plan_name"`
+	Environments []EnvironmentResponse `json:"environments"`
+	CreatedAt    time.Time             `json:"created_at"`
+}
+
+type EnvironmentResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type WorkspaceMemberResponse struct {

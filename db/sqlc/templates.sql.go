@@ -11,6 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countTemplates = `-- name: CountTemplates :one
+SELECT COUNT(*) FROM templates
+WHERE workspace_id = $1
+`
+
+func (q *Queries) CountTemplates(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTemplates, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createTemplate = `-- name: CreateTemplate :one
 INSERT INTO templates (
     workspace_id,

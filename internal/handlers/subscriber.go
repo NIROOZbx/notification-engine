@@ -117,19 +117,60 @@ func (h *SubscriberHandler) List(c fiber.Ctx) error {
 		return response.Unauthorized(c, "missing environment id")
 	}
 
-	subscribers, err := h.svc.List(c.Context(), utils.UUIDToString(workspaceID), utils.UUIDToString(envID))
+	page := utils.QueryInt32(c, "page", 1)
+	pageSize := utils.QueryInt32(c, "page_size", 20)
+
+	result, err := h.svc.List(c.Context(), utils.UUIDToString(workspaceID), utils.UUIDToString(envID), page, pageSize)
 	if err != nil {
 		h.log.Error().Err(err).Msg("failed to list subscribers")
 		return helpers.HandleServiceError(c, err, h.log)
 	}
 
-	resp := make([]dtos.SubscriberResponse, len(subscribers))
-	for i, s := range subscribers {
-		resp[i] = toSubscriberResponse(s)
+	subscriberResponses := make([]dtos.SubscriberResponse, len(result.Subscribers))
+	for i, s := range result.Subscribers {
+		subscriberResponses[i] = toSubscriberResponse(s)
+	}
+
+	resp := dtos.SubscriberListResponse{
+		Subscribers: subscriberResponses,
+		TotalCount:  result.TotalCount,
+		TotalPages:  result.TotalPages,
+		CurrentPage: result.CurrentPage,
+		PageSize:    result.PageSize,
 	}
 
 	return response.OK(c, "subscribers fetched successfully", resp)
 }
+
+func (h *SubscriberHandler) GetPreferences(c fiber.Ctx) error {
+	workspaceID, err := utils.GetWID(c)
+	if err != nil {
+		return response.Unauthorized(c, "missing workspace id")
+	}
+	envID, err := utils.GetEnvID(c)
+	if err != nil {
+		return response.Unauthorized(c, "missing environment id")
+	}
+
+	externalUserID := c.Params("externalUserId")
+	if externalUserID == "" {
+		return response.BadRequest(c, nil, "external user id is required")
+	}
+
+	prefs, err := h.svc.GetPreferencesByExternalID(c.Context(), utils.UUIDToString(workspaceID), utils.UUIDToString(envID), externalUserID)
+	if err != nil {
+		h.log.Error().Err(err).Str("external_user_id", externalUserID).Msg("failed to get preferences")
+		return helpers.HandleServiceError(c, err, h.log)
+	}
+
+	resp := make([]dtos.UserPreferenceResponse, len(prefs))
+	for i, p := range prefs {
+		resp[i] = toUserPreferenceResponse(p)
+	}
+
+	return response.OK(c, "preferences fetched successfully", resp)
+}
+
 
 func toSubscriberResponse(s *domain.Subscriber) dtos.SubscriberResponse {
 	return dtos.SubscriberResponse{

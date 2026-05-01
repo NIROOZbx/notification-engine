@@ -89,9 +89,18 @@ func (h *AuthHandler) OAuthCallback(c fiber.Ctx) error {
 	}
 
 	jwt.SetTokenCookies(c, tokenPair, h.cfg.AccessExpiryMinutes, h.cfg.RefreshExpiryHours, h.isProd())
-	h.log.Info().Str("userID", user.User.UserID).Str("provider", gothUser.Provider).Msg("User logged in successfully")
+	h.log.Info().Str("userID", user.User.UserID).Bool("has workspace",user.User.HasWorkspace).
+	Str("provider", gothUser.Provider).Msg("User logged in successfully")
 
-	return response.OK(c, "sucessful login", user)
+
+	redirectURL := h.cfg.FrontendURL
+	if !user.User.HasWorkspace {
+		redirectURL += consts.OnboardingRoute
+	} else {
+		redirectURL += consts.DashboardRoute
+	}
+
+	return c.Redirect().To(redirectURL)
 
 }
 

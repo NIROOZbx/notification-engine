@@ -57,6 +57,7 @@ func (h *LayoutHandler) GetByID(c fiber.Ctx) error {
 	if !ok {
 		return response.BadRequest(c, nil, "invalid layout id")
 	}
+	
 
 	layout, err := h.service.GetByID(c.Context(), id, workspaceID)
 	if err != nil {

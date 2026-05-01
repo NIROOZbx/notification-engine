@@ -96,23 +96,47 @@ func (q *Queries) GetWorkspaceBySlug(ctx context.Context, slug string) (Workspac
 }
 
 const getWorkspaceWithPlan = `-- name: GetWorkspaceWithPlan :one
-
-SELECT w.id, w.plan_id, p.api_keys_limit
+SELECT 
+    w.id, 
+    w.name, 
+    w.slug, 
+    p.name as plan_name,
+    w.created_at,
+    w.plan_id, 
+    p.api_keys_limit, 
+    p.max_templates, 
+    p.max_layouts
 FROM workspaces w
 JOIN plans p ON p.id = w.plan_id
 WHERE w.id = $1
 `
 
 type GetWorkspaceWithPlanRow struct {
-	ID           pgtype.UUID `db:"id" json:"id"`
-	PlanID       pgtype.UUID `db:"plan_id" json:"plan_id"`
-	ApiKeysLimit int32       `db:"api_keys_limit" json:"api_keys_limit"`
+	ID           pgtype.UUID        `db:"id" json:"id"`
+	Name         string             `db:"name" json:"name"`
+	Slug         string             `db:"slug" json:"slug"`
+	PlanName     string             `db:"plan_name" json:"plan_name"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PlanID       pgtype.UUID        `db:"plan_id" json:"plan_id"`
+	ApiKeysLimit int32              `db:"api_keys_limit" json:"api_keys_limit"`
+	MaxTemplates int32              `db:"max_templates" json:"max_templates"`
+	MaxLayouts   int32              `db:"max_layouts" json:"max_layouts"`
 }
 
 func (q *Queries) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (GetWorkspaceWithPlanRow, error) {
 	row := q.db.QueryRow(ctx, getWorkspaceWithPlan, id)
 	var i GetWorkspaceWithPlanRow
-	err := row.Scan(&i.ID, &i.PlanID, &i.ApiKeysLimit)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.PlanName,
+		&i.CreatedAt,
+		&i.PlanID,
+		&i.ApiKeysLimit,
+		&i.MaxTemplates,
+		&i.MaxLayouts,
+	)
 	return i, err
 }
 

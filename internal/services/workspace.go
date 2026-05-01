@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
 	"github.com/NIROOZbx/notification-engine/internal/billing"
 	"github.com/NIROOZbx/notification-engine/internal/dtos"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
-	"github.com/NIROOZbx/notification-engine/consts"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -84,12 +84,17 @@ func (w *workspaceService) fetchExistingWorkspace(ctx context.Context, workspace
 	if findErr != nil {
 		return nil, fmt.Errorf("fetching workspace: %w", findErr)
 	}
+
+	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching environments: %w", err)
+	}
+
 	result := &WorkspaceWithRole{
-		Workspace: mapToWorkspaceResponseFromRow(existingWorkspace),
+		Workspace: mapToWorkspaceResponseFromRow(existingWorkspace, envs),
 		Role:      role,
 	}
 	return result, nil
-
 }
 
 func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.UUID, name string) (*WorkspaceWithRole, error) {
@@ -118,13 +123,10 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 			return fmt.Errorf("creating workspace member: %w", err)
 		}
 
-		_, err = w.billingClient.CreateSubscription(ctx, utils.UUIDToString(workspace.ID), consts.PlanFree, consts.BillingProviderSystem)
-		if err != nil {
-			return fmt.Errorf("billing subscription failed: %w", err)
-		}
+		
 
 		result = &WorkspaceWithRole{
-			Workspace: mapToWorkspaceResponse(workspace, consts.PlanFree),
+			Workspace: mapToWorkspaceResponse(workspace, consts.PlanFree, nil),
 			Role:      workspaceMember.Role,
 		}
 
@@ -141,6 +143,8 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 				return fmt.Errorf("creating %s environment: %w", val, err)
 			}
 		}
+		
+		
 
 		return nil
 
@@ -150,6 +154,18 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 		return nil, err
 	}
 
+	_, err = w.billingClient.CreateSubscription(ctx, result.Workspace.ID, consts.PlanFree, consts.BillingProviderSystem)
+	if err != nil {
+		return nil, fmt.Errorf("billing subscription failed: %w", err)
+	}
+
+
+	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, utils.MustStringToUUID(result.Workspace.ID))
+	if err != nil {
+		return nil, fmt.Errorf("fetching environments: %w", err)
+	}
+	result.Workspace.Environments = mapToEnvironmentResponses(envs)
+
 	return result, nil
 }
 
@@ -158,7 +174,13 @@ func (w *workspaceService) GetByID(ctx context.Context, workspaceID pgtype.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("finding workspace: %w", err)
 	}
-	return mapToWorkspaceResponseFromRow(workspace), nil
+
+	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching environments: %w", err)
+	}
+
+	return mapToWorkspaceResponseFromRow(workspace, envs), nil
 }
 
 func (w *workspaceService) GetBySlug(ctx context.Context, slug string) (*dtos.WorkspaceResponse, error) {
@@ -166,7 +188,13 @@ func (w *workspaceService) GetBySlug(ctx context.Context, slug string) (*dtos.Wo
 	if err != nil {
 		return nil, fmt.Errorf("finding workspace by slug: %w", err)
 	}
-	return mapToWorkspaceResponse(workspace, ""), nil
+
+	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspace.ID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching environments: %w", err)
+	}
+
+	return mapToWorkspaceResponse(workspace, "", envs), nil
 }
 
 func (w *workspaceService) UpdateName(ctx context.Context, workspaceID pgtype.UUID, name string) (*dtos.WorkspaceResponse, error) {
@@ -178,7 +206,13 @@ func (w *workspaceService) UpdateName(ctx context.Context, workspaceID pgtype.UU
 	if err != nil {
 		return nil, fmt.Errorf("updating workspace name: %w", err)
 	}
-	return mapToWorkspaceResponse(workspace, ""), nil
+
+	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching environments: %w", err)
+	}
+
+	return mapToWorkspaceResponse(workspace, "", envs), nil
 }
 
 func (w *workspaceService) Delete(ctx context.Context, workspaceID pgtype.UUID) error {
@@ -343,24 +377,38 @@ func (w *workspaceService) RemoveMember(ctx context.Context, params RemoveMember
 	return nil
 }
 
-func mapToWorkspaceResponse(w sqlc.Workspace, planName string) *dtos.WorkspaceResponse {
+
+func mapToWorkspaceResponse(w sqlc.Workspace, planName string, envs []sqlc.Environment) *dtos.WorkspaceResponse {
 	return &dtos.WorkspaceResponse{
-		ID:        utils.UUIDToString(w.ID),
-		Name:      w.Name,
-		Slug:      w.Slug,
-		PlanName:  planName,
-		CreatedAt: w.CreatedAt.Time,
+		ID:           utils.UUIDToString(w.ID),
+		Name:         w.Name,
+		Slug:         w.Slug,
+		PlanName:     planName,
+		Environments: mapToEnvironmentResponses(envs),
+		CreatedAt:    w.CreatedAt.Time,
 	}
 }
 
-func mapToWorkspaceResponseFromRow(w sqlc.GetWorkspaceWithPlanNameRow) *dtos.WorkspaceResponse {
+func mapToWorkspaceResponseFromRow(w sqlc.GetWorkspaceWithPlanRow, envs []sqlc.Environment) *dtos.WorkspaceResponse {
 	return &dtos.WorkspaceResponse{
-		ID:        utils.UUIDToString(w.ID),
-		Name:      w.Name,
-		Slug:      w.Slug,
-		PlanName:  w.PlanName,
-		CreatedAt: w.CreatedAt.Time,
+		ID:           utils.UUIDToString(w.ID),
+		Name:         w.Name,
+		Slug:         w.Slug,
+		PlanName:     w.PlanName,
+		Environments: mapToEnvironmentResponses(envs),
+		CreatedAt:    w.CreatedAt.Time,
 	}
+}
+
+func mapToEnvironmentResponses(envs []sqlc.Environment) []dtos.EnvironmentResponse {
+	res := make([]dtos.EnvironmentResponse, 0, len(envs))
+	for _, env := range envs {
+		res = append(res, dtos.EnvironmentResponse{
+			ID:   utils.UUIDToString(env.ID),
+			Name: env.Name,
+		})
+	}
+	return res
 }
 
 func mapToMemberResponse(m sqlc.GetWorkspaceMembersWithDetailsRow) dtos.WorkspaceMemberResponse {

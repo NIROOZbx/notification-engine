@@ -4,13 +4,15 @@ type UserDetails struct {
 	Name      string
 	Email     string
 	AvatarURL string
-	UserID    string
+	UserID       string
+	HasWorkspace bool `json:"hasWorkspace"`
 }
 type WorkSpaceDetails struct {
 	WorkspaceID   string
 	WorkSpaceName string
 	Slug          string
-	Role          string
+	Role          string            `json:"role"`
+	Environments  []EnvironmentResponse `json:"environments,omitempty"`
 }
 
 type AuthResponse struct {

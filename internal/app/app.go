@@ -61,6 +61,7 @@ type RouterDeps struct {
 	ChnlConfigHandler *handlers.ChannelConfigHandler
 	PlanHandler       *handlers.PlanHandler
 	BillingHandler    *handlers.BillingHandler
+	AnalyticsHandler  *handlers.AnalyticsHandler
 }
 
 func StartApp(cfg *config.Config) (*App, error) {
@@ -94,7 +95,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	httpClient := httpclient.NewClient()
 
-	billingClient, err := billing.NewGRPCClient(cfg.GRPC.GRPCPort)
+	billingClient, err := billing.NewGRPCClient(cfg.GRPC.GRPCPort, appLogger)
 
 	if err != nil {
 		appLogger.Fatal().Err(err).Msg("failed to connect to billing service")
@@ -116,6 +117,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	notifRepo := repositories.NewNotificationRepository(repo, chnlConfigRepo, templateRepo)
 	layoutRepo := repositories.NewLayoutRepo(repo)
 	schedulerRepo := repositories.NewSchedulerRepo(repo)
+	analyticsRepo := repositories.NewAnalyticsRepository(repo)
 
 	// ==========================================
 	// 3. SERVICE LAYER (Business Logic)
@@ -126,11 +128,12 @@ func StartApp(cfg *config.Config) (*App, error) {
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
 	subscriberSvc := services.NewSubscriberService(subscriberRepo)
-	templateSvc := services.NewTemplateService(templateRepo, layoutRepo)
-	layoutSvc := services.NewLayoutService(layoutRepo)
+	templateSvc := services.NewTemplateService(templateRepo, layoutRepo, wspRepo)
+	layoutSvc := services.NewLayoutService(layoutRepo, wspRepo)
 	chnlConfigSvc := services.NewChannelConfigService(chnlConfigRepo, cfg.SecretKey)
 	planSvc := services.NewPlanService(planRepo)
 	billingSvc := services.NewBillingService(billingClient)
+	analyticsSvc := services.NewAnalyticsService(analyticsRepo, appLogger)
 
 	// ==========================================
 	//  ENGINE CONFIGURATION
@@ -163,7 +166,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	// 4. HTTP LAYER (Handlers & Middleware)
 	// ==========================================
 
-	userHandler := handlers.NewUserHandler(userService, appLogger)
+	userHandler := handlers.NewUserHandler(userService, workspaceService, appLogger)
 	wspHandler := handlers.NewWorkspaceHandler(workspaceService)
 	authHandler := handlers.NewAuthHandler(authService, &cfg.Auth, appLogger)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService, appLogger)
@@ -174,6 +177,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	chnlConfigHandler := handlers.NewChannelConfigHandler(chnlConfigSvc, appLogger)
 	planHandler := handlers.NewPlanHandler(planSvc)
 	billingHandler := handlers.NewBillingHandler(billingSvc, userService, appLogger)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsSvc, appLogger)
 
 	// ==========================================
 	// 5. FIBER SETUP & ROUTING
@@ -207,9 +211,10 @@ func StartApp(cfg *config.Config) (*App, error) {
 		ChnlConfigHandler: chnlConfigHandler,
 		PlanHandler:       planHandler,
 		BillingHandler:    billingHandler,
+		AnalyticsHandler:  analyticsHandler,
 	}
 
-	SetUpRoutes(&r)
+	SetUpRoutes(&r, &cfg.CORS)
 
 	return &App{
 		Server:    app,
@@ -239,7 +244,7 @@ func setUpConsumers(broker string, engine *core.Engine, groupID string, log zero
 
 	consumers := make(map[string]queue.Consumer)
 
-	topics := []string{queue.TopicSMS, queue.TopicEmail, queue.TopicDLQ,queue.TopicSystem}
+	topics := []string{queue.TopicSMS, queue.TopicEmail, queue.TopicDLQ, queue.TopicSystem}
 
 	for _, topic := range topics {
 		handler := engine.Process

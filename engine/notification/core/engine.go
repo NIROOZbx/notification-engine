@@ -367,11 +367,18 @@ func (e *Engine) Process(ctx context.Context, event *models.NotificationEvent) e
 	defer cancel()
 
 	startTime := time.Now()
-	sendErr := p.Send(sendCtx, provider.Message{
+	providerID, sendErr := p.Send(sendCtx, provider.Message{
 		To:      notifLog.Recipient,
 		Channel: p.Channel(),
 		Content: rendered,
 	}, creds)
+
+	if providerID != "" {
+		updateErr := e.repo.UpdateProviderMessageID(ctx, notifLog.ID, providerID)
+		if updateErr != nil {
+			e.log.Error().Err(updateErr).Str("log_id", notifLog.ID).Msg("failed to update provider message ID")
+		}
+	}
 
 	if !notifLog.IsTest {
 		err := e.billingClient.RecordUsage(ctx, billing.RecordUsageInput{

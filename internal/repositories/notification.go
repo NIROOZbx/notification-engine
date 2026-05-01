@@ -94,6 +94,22 @@ func (r *notificationRepository) UpdateNotificationStatus(ctx context.Context, i
 	return err
 }
 
+func (r *notificationRepository) UpdateProviderMessageID(ctx context.Context, id string, providerMessageID string) error {
+	return r.queries.UpdateProviderMessageID(ctx, sqlc.UpdateProviderMessageIDParams{
+		ID:                utils.MustStringToUUID(id),
+		ProviderMessageID: helpers.Text(providerMessageID),
+	})
+}
+
+func (r *notificationRepository) UpdateDeliveryStatusByProviderID(ctx context.Context, input domain.UpdateDeliveryStatusInput) error {
+    return r.queries.UpdateDeliveryStatusByProviderID(ctx, sqlc.UpdateDeliveryStatusByProviderIDParams{
+        ProviderMessageID: helpers.Text(input.ProviderMessageID),
+        DeliveryStatus:    helpers.Text(input.DeliveryStatus),
+        DeliveredAt:       helpers.Timestamp(input.Timestamp), // always pass — DB CASE WHEN decides
+        ProviderResponse:  helpers.Text(input.ErrorMessage),
+    })
+}
+
 func (r *notificationRepository) InsertNotificationAttempt(ctx context.Context, params core.CreateAttemptParams) error {
 	_, err := r.queries.InsertNotificationAttempt(ctx, sqlc.InsertNotificationAttemptParams{
 		NotificationLogID: utils.MustStringToUUID(params.NotificationLogID),

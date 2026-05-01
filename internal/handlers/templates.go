@@ -68,7 +68,7 @@ func (h *TemplateHandler) GetByID(c fiber.Ctx) error {
 	if err != nil {
 		return response.Unauthorized(c, "missing workspace id")
 	}
-	id, ok := utils.ParseIDParam(c, "templateID")
+	id, ok := utils.ParseIDParam(c, "templateId")
 
 	if !ok {
 		return response.BadRequest(c, nil, "invalid template id")
@@ -205,6 +205,8 @@ func (h *TemplateHandler) ListChannels(c fiber.Ctx) error {
 		return response.Unauthorized(c, "missing workspace id")
 	}
 	templateID := c.Params("templateId")
+
+	utils.ParseIDParam(c,"templateId")
 
 	channels, err := h.service.ListChannels(c.Context(), utils.MustStringToUUID(templateID), workspaceID)
 	if err != nil {

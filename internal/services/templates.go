@@ -12,8 +12,9 @@ import (
 )
 
 type templateService struct {
-	repo       repositories.TemplateRepository
-	layoutRepo repositories.LayoutRepo
+	repo          repositories.TemplateRepository
+	layoutRepo    repositories.LayoutRepo
+	workspaceRepo repositories.WorkspaceRepository
 }
 
 type TemplateService interface {
@@ -35,14 +36,29 @@ var validStatuses = map[string]bool{
 	"draft": true, "live": true, "dropped": true,
 }
 
-func NewTemplateService(repo repositories.TemplateRepository, layoutRepo repositories.LayoutRepo) *templateService {
+func NewTemplateService(repo repositories.TemplateRepository, layoutRepo repositories.LayoutRepo, workspaceRepo repositories.WorkspaceRepository) *templateService {
 	return &templateService{
-		repo:       repo,
-		layoutRepo: layoutRepo,
+		repo:          repo,
+		layoutRepo:    layoutRepo,
+		workspaceRepo: workspaceRepo,
 	}
 }
 
 func (s *templateService) Create(ctx context.Context, params domain.CreateTemplateParams) (*domain.Template, error) {
+	plan, err := s.workspaceRepo.GetWorkspaceWithPlan(ctx, params.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching plan: %w", err)
+	}
+
+	count, err := s.repo.CountTemplates(ctx, params.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("counting templates: %w", err)
+	}
+
+	if int32(count) >= plan.MaxTemplates {
+		return nil, apperrors.ErrLimitReached
+	}
+
 	if !params.LayoutID.Valid {
 		defaultLayout, err := s.layoutRepo.GetDefaultLayout(ctx, params.WorkspaceID)
 		if err == nil && defaultLayout != nil {

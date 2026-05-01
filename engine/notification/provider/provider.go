@@ -9,7 +9,7 @@ type Message struct {
 }
 
 type Provider interface {
-	Send(ctx context.Context, msg Message, config map[string]string) error
+	Send(ctx context.Context, msg Message, config map[string]string) (string,error)
 	Channel() string
 	Name() string
 	RequiredFields() []string

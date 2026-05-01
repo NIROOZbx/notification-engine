@@ -19,14 +19,32 @@ type LayoutService interface {
 }
 
 type layoutService struct {
-	repo repositories.LayoutRepo
+	repo          repositories.LayoutRepo
+	workspaceRepo repositories.WorkspaceRepository
 }
 
-func NewLayoutService(repo repositories.LayoutRepo) *layoutService {
-	return &layoutService{repo: repo}
+func NewLayoutService(repo repositories.LayoutRepo, workspaceRepo repositories.WorkspaceRepository) *layoutService {
+	return &layoutService{
+		repo:          repo,
+		workspaceRepo: workspaceRepo,
+	}
 }
 
 func (s *layoutService) Create(ctx context.Context, params domain.CreateLayoutParams) (*domain.Layout, error) {
+	plan, err := s.workspaceRepo.GetWorkspaceWithPlan(ctx, params.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching plan: %w", err)
+	}
+
+	count, err := s.repo.CountLayouts(ctx, params.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("counting layouts: %w", err)
+	}
+
+	if int32(count) >= plan.MaxLayouts {
+		return nil, apperrors.ErrLimitReached
+	}
+
 	layout, err := s.repo.Create(ctx, params)
 	if err != nil {
 		return nil, err

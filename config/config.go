@@ -64,6 +64,7 @@ type AuthConfig struct {
 	AccessTokenSecret   string `mapstructure:"access_token_secret"`
 	RefreshTokenSecret  string `mapstructure:"refresh_token_secret"`
 	Environment         string `mapstructure:"environment"`
+	FrontendURL         string `mapstructure:"frontend_url"`
 }
 
 type KafkaConfig struct {
@@ -72,6 +73,10 @@ type KafkaConfig struct {
 }
 type GRPCConfig struct {
 	GRPCPort string `mapstructure:"grpc_port"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
 
@@ -85,6 +90,7 @@ type Config struct {
 	Kafka     KafkaConfig    `mapstructure:"kafka"`
 	SecretKey string         `mapstructure:"secret_key"`
 	GRPC      GRPCConfig     `mapstructure:"grpc"`
+	CORS      CORSConfig     `mapstructure:"cors"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -122,7 +128,6 @@ func LoadConfig() (*Config, error) {
 	v.BindEnv("kafka.group_id", "KAFKA_GROUP_ID")
 
 	v.BindEnv("secret_key", "CREDENTIALS_SECRET")
-
 
 	var cfg Config
 

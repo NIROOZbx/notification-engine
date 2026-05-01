@@ -19,13 +19,13 @@ func NewMockProvider(ch string, log zerolog.Logger) *mockProvider {
 
 }
 
-func (m *mockProvider) Send(ctx context.Context, msg Message, config map[string]string) error {
+func (m *mockProvider) Send(ctx context.Context, msg Message, config map[string]string)(string, error) {
 	m.log.Info().
 		Str("to", msg.To).
 		Interface("subject", msg.Content["subject"]).
 		Interface("body", msg.Content["body"]).
 		Msg("[MOCK] email sent")
-	return nil
+	return "",nil
 }
 
 func (m *mockProvider) Name() string {

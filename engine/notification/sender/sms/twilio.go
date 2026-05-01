@@ -36,7 +36,7 @@ func (p *twilioProvider) RequiredContent() []string {
 	return []string{"body"}
 }
 
-func (p *twilioProvider) Send(ctx context.Context, msg provider.Message, config map[string]string) error {
+func (p *twilioProvider) Send(ctx context.Context, msg provider.Message, config map[string]string) (string, error) {
 	accountSid := config["account_sid"]
 	authToken := config["auth_token"]
 	from := config["from"]
@@ -48,7 +48,7 @@ func (p *twilioProvider) Send(ctx context.Context, msg provider.Message, config 
 
 	body, ok := msg.Content["body"].(string)
 	if !ok {
-		return fmt.Errorf("missing or invalid body content")
+		return "", fmt.Errorf("missing or invalid body content")
 	}
 
 	twilioClient := &client.Client{
@@ -58,9 +58,9 @@ func (p *twilioProvider) Send(ctx context.Context, msg provider.Message, config 
 	twilioClient.SetAccountSid(accountSid)
 
 	restClient := twilio.NewRestClientWithParams(twilio.ClientParams{
-		Username:   accountSid,
-		Password:   authToken,
-		Client:     twilioClient,
+		Username: accountSid,
+		Password: authToken,
+		Client:   twilioClient,
 	})
 
 	params := &twilioApi.CreateMessageParams{}
@@ -74,7 +74,7 @@ func (p *twilioProvider) Send(ctx context.Context, msg provider.Message, config 
 			Err(err).
 			Str("to", msg.To).
 			Msg("Twilio send request failed")
-		return fmt.Errorf("twilio error: %w", err)
+		return "", fmt.Errorf("twilio error: %w", err)
 	}
 
 	if resp.ErrorCode != nil {
@@ -87,7 +87,7 @@ func (p *twilioProvider) Send(ctx context.Context, msg provider.Message, config 
 			Str("errorMessage", errMsg).
 			Str("to", msg.To).
 			Msg("Twilio API returned an error")
-		return fmt.Errorf("twilio api error: %s (code %v)", errMsg, resp.ErrorCode)
+		return "", fmt.Errorf("twilio api error: %s (code %v)", errMsg, resp.ErrorCode)
 	}
 
 	p.log.Info().
@@ -95,5 +95,10 @@ func (p *twilioProvider) Send(ctx context.Context, msg provider.Message, config 
 		Str("to", msg.To).
 		Msg("SMS successfully sent via Twilio")
 
-	return nil
+	if resp.Sid == nil {
+		p.log.Warn().Str("to", msg.To).Msg("twilio returned no SID — delivery tracking unavailable")
+		return "", nil
+	}
+	return *resp.Sid, nil
+
 }

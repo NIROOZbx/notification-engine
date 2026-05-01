@@ -36,7 +36,7 @@ func (s *sesProvider) RequiredFields() []string {
 
 func (s *sesProvider) RequiredContent() []string { return []string{"subject", "body"} }
 
-func (s *sesProvider) Send(ctx context.Context, msg provider.Message, configs map[string]string) error {
+func (s *sesProvider) Send(ctx context.Context, msg provider.Message, configs map[string]string) (string, error) {
 	accessKey := configs["access_key_id"]
 	secretKey := configs["secret_access_key"]
 	region := configs["region"]
@@ -57,7 +57,7 @@ func (s *sesProvider) Send(ctx context.Context, msg provider.Message, configs ma
 		config.WithHTTPClient(s.client),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to load aws config: %w", err)
+		return "", fmt.Errorf("failed to load aws config: %w", err)
 	}
 
 	svc := ses.NewFromConfig(cfg)
@@ -96,7 +96,7 @@ func (s *sesProvider) Send(ctx context.Context, msg provider.Message, configs ma
 			Err(err).
 			Str("to", msg.To).
 			Msg("SES SendEmail failed")
-		return fmt.Errorf("ses error: %w", err)
+		return "", fmt.Errorf("ses error: %w", err)
 	}
 
 	s.log.Info().
@@ -104,5 +104,5 @@ func (s *sesProvider) Send(ctx context.Context, msg provider.Message, configs ma
 		Str("to", msg.To).
 		Msg("Email successfully sent via SES (v2)")
 
-	return nil
+	return *result.MessageId, nil
 }

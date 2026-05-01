@@ -18,6 +18,7 @@ var (
 	ErrInternal          = errors.New("internal server error")
 	ErrBadRequest        = errors.New("bad request")
 	ErrUnauthorized      = errors.New("unauthorized: invalid or missing session")
+	ErrLimitReached      = errors.New("plan limit reached: please upgrade your plan")
 
 	// layout specific
 	ErrDefaultExists = errors.New("a default layout already exists in this workspace")
@@ -36,6 +37,7 @@ var (
 	ErrDuplicateConfig     = errors.New("a config already exists for this provider and channel")
 	ErrInactiveProvider    = errors.New("cannot set an inactive provider as the default")
 	ErrDecryptionFailed    = errors.New("failed to decrypt credentials: check your secret key")
+	ErrAlreadyCancelled    = errors.New("already been cancelled")
 )
 
 type NotFoundError struct {

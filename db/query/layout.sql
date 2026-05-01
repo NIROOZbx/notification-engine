@@ -42,3 +42,7 @@ UPDATE layouts
 SET is_default = (id = $1)
 WHERE workspace_id = $2;
 
+-- name: CountLayouts :one
+SELECT COUNT(*) FROM layouts
+WHERE workspace_id = $1;
+

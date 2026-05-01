@@ -30,3 +30,10 @@ auth:
   access_expiry_minutes: 15
   refresh_expiry_hours: 168
   environment: development
+  frontend_url: "http://localhost:5173"
+
+cors:
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+    - "http://localhost:5174"

@@ -82,27 +82,32 @@ type NotificationEvent struct {
 }
 
 type NotificationLog struct {
-	ID              pgtype.UUID        `db:"id" json:"id"`
-	WorkspaceID     pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
-	EnvironmentID   pgtype.UUID        `db:"environment_id" json:"environment_id"`
-	TemplateID      pgtype.UUID        `db:"template_id" json:"template_id"`
-	ExternalUserID  string             `db:"external_user_id" json:"external_user_id"`
-	EventType       string             `db:"event_type" json:"event_type"`
-	Channel         string             `db:"channel" json:"channel"`
-	Status          string             `db:"status" json:"status"`
-	RenderedContent []byte             `db:"rendered_content" json:"rendered_content"`
-	IdempotencyKey  string             `db:"idempotency_key" json:"idempotency_key"`
-	AttemptCount    int32              `db:"attempt_count" json:"attempt_count"`
-	IsTest          bool               `db:"is_test" json:"is_test"`
-	QueuedAt        pgtype.Timestamptz `db:"queued_at" json:"queued_at"`
-	Recipient       string             `db:"recipient" json:"recipient"`
-	SentAt          pgtype.Timestamptz `db:"sent_at" json:"sent_at"`
-	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	ScheduledAt     pgtype.Timestamptz `db:"scheduled_at" json:"scheduled_at"`
-	NextRetryAt     pgtype.Timestamptz `db:"next_retry_at" json:"next_retry_at"`
-	ErrorMessage    pgtype.Text        `db:"error_message" json:"error_message"`
-	TriggerData     []byte             `db:"trigger_data" json:"trigger_data"`
-	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	WorkspaceID       pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID     pgtype.UUID        `db:"environment_id" json:"environment_id"`
+	TemplateID        pgtype.UUID        `db:"template_id" json:"template_id"`
+	ExternalUserID    string             `db:"external_user_id" json:"external_user_id"`
+	EventType         string             `db:"event_type" json:"event_type"`
+	Channel           string             `db:"channel" json:"channel"`
+	Status            string             `db:"status" json:"status"`
+	RenderedContent   []byte             `db:"rendered_content" json:"rendered_content"`
+	IdempotencyKey    string             `db:"idempotency_key" json:"idempotency_key"`
+	AttemptCount      int32              `db:"attempt_count" json:"attempt_count"`
+	IsTest            bool               `db:"is_test" json:"is_test"`
+	QueuedAt          pgtype.Timestamptz `db:"queued_at" json:"queued_at"`
+	Recipient         string             `db:"recipient" json:"recipient"`
+	SentAt            pgtype.Timestamptz `db:"sent_at" json:"sent_at"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ScheduledAt       pgtype.Timestamptz `db:"scheduled_at" json:"scheduled_at"`
+	NextRetryAt       pgtype.Timestamptz `db:"next_retry_at" json:"next_retry_at"`
+	ErrorMessage      pgtype.Text        `db:"error_message" json:"error_message"`
+	TriggerData       []byte             `db:"trigger_data" json:"trigger_data"`
+	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DeliveryStatus    pgtype.Text        `db:"delivery_status" json:"delivery_status"`
+	DeliveredAt       pgtype.Timestamptz `db:"delivered_at" json:"delivered_at"`
+	FailedAt          pgtype.Timestamptz `db:"failed_at" json:"failed_at"`
+	ProviderMessageID pgtype.Text        `db:"provider_message_id" json:"provider_message_id"`
+	ProviderResponse  pgtype.Text        `db:"provider_response" json:"provider_response"`
 }
 
 type Plan struct {

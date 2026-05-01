@@ -48,3 +48,15 @@ func BoolPtr(b *bool) pgtype.Bool {
     }
     return pgtype.Bool{Bool: *b, Valid: true}
 }
+
+func TimeFromInterval(i pgtype.Interval) time.Time {
+
+    return time.Time{} 
+}
+
+func TimeFromInterface(i interface{}) time.Time {
+    if t, ok := i.(time.Time); ok {
+        return t
+    }
+    return time.Time{}
+}

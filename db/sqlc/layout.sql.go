@@ -11,6 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLayouts = `-- name: CountLayouts :one
+SELECT COUNT(*) FROM layouts
+WHERE workspace_id = $1
+`
+
+func (q *Queries) CountLayouts(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLayouts, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLayout = `-- name: CreateLayout :one
 INSERT INTO layouts (
     workspace_id,

@@ -30,12 +30,23 @@ func TimestampFromPtr(t *time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: *t, Valid: true}
 }
 
+func TimestampFromTime(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: !t.IsZero()}
+}
+
 func TimeFromTimestamp(t pgtype.Timestamptz) *time.Time {
 	if !t.Valid {
 		return nil
 	}
 	tCopy := t.Time
 	return &tCopy
+}
+
+func TimeFromTimestampVal(t pgtype.Timestamptz) time.Time {
+	if !t.Valid {
+		return time.Time{}
+	}
+	return t.Time
 }
 
 func TextFromPtr(s *string) pgtype.Text {
@@ -51,4 +62,18 @@ func StringFromText(t pgtype.Text) *string {
 	}
 	sCopy := t.String
 	return &sCopy
+}
+
+func ToNullString(s *string) pgtype.Text {
+	if s == nil {
+		return pgtype.Text{Valid: false}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
+func PtrTimeFromTimestamp(t pgtype.Timestamptz) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Time
 }

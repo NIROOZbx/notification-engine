@@ -52,3 +52,7 @@ RETURNING *;
 DELETE FROM templates
 WHERE id = $1 AND workspace_id = $2;
 
+-- name: CountTemplates :one
+SELECT COUNT(*) FROM templates
+WHERE workspace_id = $1;
+
