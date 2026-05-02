@@ -4,6 +4,7 @@ import "fmt"
 
 // Default API endpoints. These paths are appended to the base URL.
 const (
+	defaultBaseURL = "http://localhost:8080/api/v1"
 	TriggerPath    = "/events/trigger"
 	IdentifyPath   = "/identify"
 	PreferencePath = "/identify/preferences"
