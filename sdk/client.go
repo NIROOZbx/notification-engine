@@ -12,7 +12,7 @@ import (
 )
 
 // defaultBaseURL is the production URL of the Notification Engine API.
-const defaultBaseURL = "https://localhost:8080/api/v1"
+const defaultBaseURL = "http://localhost:8080/api/v1"
 
 // Option configures a Client with custom settings.
 // Use WithTimeout, WithHTTPClient, or other option functions.
