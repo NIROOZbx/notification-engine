@@ -15,12 +15,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type ContactInput struct {
+	Channel      string
+	ContactValue string
+}
+
 type IdentifySubscriberInput struct {
 	WorkspaceID    string
 	EnvironmentID  string
 	ExternalUserID string
-	Channel        string
-	ContactValue   string
+	Contacts       []ContactInput
 	Metadata       map[string]any
 }
 
@@ -34,7 +38,7 @@ type UpsertPreferenceInput struct {
 }
 
 type SubscriberService interface {
-	Identify(ctx context.Context, input IdentifySubscriberInput) (*domain.Subscriber, error)
+	Identify(ctx context.Context, input IdentifySubscriberInput) ([]*domain.Subscriber, error)
 	UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*domain.UserPreference, error)
 	Delete(ctx context.Context, id, workspaceID string) error
 	List(ctx context.Context, workspaceID, environmentID string, page, pageSize int32) (*domain.SubscriberList, error)
@@ -49,32 +53,37 @@ func NewSubscriberService(repo repositories.SubscriberRepo) *subscriberService {
 	return &subscriberService{repo: repo}
 }
 
-func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscriberInput) (*domain.Subscriber, error) {
-	if !consts.ValidChannels[input.Channel] {
-		return nil, fmt.Errorf("invalid channel: %s", input.Channel)
-	}
-
+func (s *subscriberService) Identify(ctx context.Context, input IdentifySubscriberInput) ([]*domain.Subscriber, error) {
 	metadataBytes, err := conversion.JSONBFromMap(input.Metadata) 
 	if err != nil {
 		return nil, err
 	}
 
-	params := sqlc.UpsertUserContactInfoParams{
-		WorkspaceID:    utils.MustStringToUUID(input.WorkspaceID),
-		EnvironmentID:  utils.MustStringToUUID(input.EnvironmentID),
-		ExternalUserID: input.ExternalUserID,
-		Channel:        input.Channel,
-		ContactValue:   input.ContactValue,
-		Verified:       helpers.Bool(false), 
-		Metadata:       metadataBytes,
+	var subscribers []*domain.Subscriber
+
+	for _, contact := range input.Contacts {
+		if !consts.ValidChannels[contact.Channel] {
+			return nil, fmt.Errorf("invalid channel: %s", contact.Channel)
+		}
+
+		params := sqlc.UpsertUserContactInfoParams{
+			WorkspaceID:    utils.MustStringToUUID(input.WorkspaceID),
+			EnvironmentID:  utils.MustStringToUUID(input.EnvironmentID),
+			ExternalUserID: input.ExternalUserID,
+			Channel:        contact.Channel,
+			ContactValue:   contact.ContactValue,
+			Verified:       helpers.Bool(false), 
+			Metadata:       metadataBytes,
+		}
+
+		subscriber, err := s.repo.UpsertSubscriber(ctx, params)
+		if err != nil {
+			return nil, err
+		}
+		subscribers = append(subscribers, subscriber)
 	}
 
-	subscriber, err := s.repo.UpsertSubscriber(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-
-	return subscriber, nil
+	return subscribers, nil
 }
 
 func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPreferenceInput) (*domain.UserPreference, error) {

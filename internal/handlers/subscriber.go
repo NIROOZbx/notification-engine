@@ -38,12 +38,19 @@ func (h *SubscriberHandler) Identify(c fiber.Ctx) error {
 		return response.BadRequest(c, nil, "invalid request body")
 	}
 
-	subscriber, err := h.svc.Identify(c.Context(), services.IdentifySubscriberInput{
+	var contacts []services.ContactInput
+	for _, c := range req.Contacts {
+		contacts = append(contacts, services.ContactInput{
+			Channel:      c.Channel,
+			ContactValue: c.ContactValue,
+		})
+	}
+
+	subscribers, err := h.svc.Identify(c.Context(), services.IdentifySubscriberInput{
 		WorkspaceID:    utils.UUIDToString(workspaceID),
 		EnvironmentID:  utils.UUIDToString(envID),
 		ExternalUserID: req.ExternalUserID,
-		Channel:        req.Channel,
-		ContactValue:   req.ContactValue,
+		Contacts:       contacts,
 		Metadata:       req.Metadata,
 	})
 
@@ -52,7 +59,12 @@ func (h *SubscriberHandler) Identify(c fiber.Ctx) error {
 		return helpers.HandleServiceError(c, err, h.log)
 	}
 
-	return response.OK(c, "user identified successfully", toSubscriberResponse(subscriber))
+	resp := make([]dtos.SubscriberResponse, len(subscribers))
+	for i, sub := range subscribers {
+		resp[i] = toSubscriberResponse(sub)
+	}
+
+	return response.OK(c, "user identified successfully", resp)
 }
 
 func (h *SubscriberHandler) UpsertPreference(c fiber.Ctx) error {

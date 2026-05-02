@@ -1,9 +1,13 @@
 package dtos
 
+type ContactInfo struct {
+	Channel      string `json:"channel"          validate:"required"`
+	ContactValue string `json:"contact_value"    validate:"required"`
+}
+
 type IdentifyRequest struct {
 	ExternalUserID string         `json:"external_user_id" validate:"required"`
-	Channel        string         `json:"channel"          validate:"required"`
-	ContactValue   string         `json:"contact_value"    validate:"required"`
+	Contacts       []ContactInfo  `json:"contacts"         validate:"required,min=1,dive"`
 	Metadata       map[string]any `json:"metadata"`
 }
 
