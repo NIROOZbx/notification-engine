@@ -102,12 +102,12 @@ func (r *notificationRepository) UpdateProviderMessageID(ctx context.Context, id
 }
 
 func (r *notificationRepository) UpdateDeliveryStatusByProviderID(ctx context.Context, input domain.UpdateDeliveryStatusInput) error {
-    return r.queries.UpdateDeliveryStatusByProviderID(ctx, sqlc.UpdateDeliveryStatusByProviderIDParams{
-        ProviderMessageID: helpers.Text(input.ProviderMessageID),
-        DeliveryStatus:    helpers.Text(input.DeliveryStatus),
-        DeliveredAt:       helpers.Timestamp(input.Timestamp), // always pass — DB CASE WHEN decides
-        ProviderResponse:  helpers.Text(input.ErrorMessage),
-    })
+	return r.queries.UpdateDeliveryStatusByProviderID(ctx, sqlc.UpdateDeliveryStatusByProviderIDParams{
+		ProviderMessageID: helpers.Text(input.ProviderMessageID),
+		DeliveryStatus:    helpers.Text(input.DeliveryStatus),
+		DeliveredAt:       helpers.Timestamp(input.Timestamp), // always pass — DB CASE WHEN decides
+		ProviderResponse:  helpers.Text(input.ErrorMessage),
+	})
 }
 
 func (r *notificationRepository) InsertNotificationAttempt(ctx context.Context, params core.CreateAttemptParams) error {
@@ -163,6 +163,25 @@ func (r *notificationRepository) GetTemplateByID(ctx context.Context, workspaceI
 	return mapDomainToCoreTemplate(tpl), nil
 }
 
+func (r *notificationRepository) GetTemplateWithChannel(ctx context.Context, templateID, workspaceID, channel string) (*core.Template, *core.TemplateChannel, error) {
+	row, err := r.queries.GetTemplateWithChannel(ctx, sqlc.GetTemplateWithChannelParams{
+		ID:          utils.MustStringToUUID(templateID),
+		WorkspaceID: utils.MustStringToUUID(workspaceID),
+		Channel:     channel,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tpl := mapSqlcToCoreTemplate(row.Template)
+	ch, err := mapSqlcToCoreTemplateChannel(row.TemplateChannel)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return tpl, ch, nil
+}
+
 func (r *notificationRepository) GetChannelConfigByID(ctx context.Context, channelConfigID, workspaceID string) (*core.ChannelConfig, error) {
 	cfg, err := r.configRepo.GetChannelConfigByID(ctx, utils.MustStringToUUID(channelConfigID), utils.MustStringToUUID(workspaceID))
 	if err != nil {
@@ -197,6 +216,36 @@ func (r *notificationRepository) GetContactByExternalUserAndChannel(ctx context.
 		ContactValue: row.ContactValue,
 		Channel:      row.Channel,
 	}, nil
+}
+
+func (r *notificationRepository) GetContactWithPreference(ctx context.Context, params core.GetContactWithPreferenceParams) (*core.Contact, *core.Preference, error) {
+	row, err := r.queries.GetContactWithPreference(ctx, sqlc.GetContactWithPreferenceParams{
+		ExternalUserID: params.ExternalUserID,
+		WorkspaceID:    utils.MustStringToUUID(params.WorkspaceID),
+		EnvironmentID:  utils.MustStringToUUID(params.EnvironmentID),
+		Channel:        params.Channel,
+		EventType:      helpers.Text(params.EventType),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get contact with preference: %w", err)
+	}
+
+	contact := &core.Contact{
+		ID:           utils.UUIDToString(row.UserInfo.ID),
+		ContactValue: row.UserInfo.ContactValue,
+		Channel:      row.UserInfo.Channel,
+	}
+
+	var preference *core.Preference
+	if row.UserPreference.ID.Valid {
+		preference = &core.Preference{
+			Channel:   row.UserPreference.Channel,
+			EventType: row.UserPreference.EventType.String,
+			IsEnabled: row.UserPreference.IsEnabled,
+		}
+	}
+
+	return contact, preference, nil
 }
 
 func (r *notificationRepository) GetWorkspaceOwners(ctx context.Context, workspaceID string) ([]core.Contact, error) {
@@ -259,8 +308,6 @@ func (r *notificationRepository) GetLayoutByID(ctx context.Context, layoutID, wo
 		HTML: layout.Html,
 	}, nil
 }
-
-
 
 // Mappers
 
@@ -331,4 +378,31 @@ func mapDomainToCoreChannelConfig(row *domain.ChannelConfig) *core.ChannelConfig
 		Encrypted:   row.Encrypted,
 		Credentials: row.Credentials,
 	}
+}
+
+func mapSqlcToCoreTemplate(tpl sqlc.Template) *core.Template {
+	return &core.Template{
+		ID:          utils.UUIDToString(tpl.ID),
+		WorkspaceID: utils.UUIDToString(tpl.WorkspaceID),
+		EnvID:       utils.UUIDToString(tpl.EnvironmentID),
+		LayoutID:    utils.UUIDToString(tpl.LayoutID),
+		EventType:   tpl.EventType,
+		Status:      tpl.Status,
+		Name:        tpl.Name,
+	}
+}
+
+func mapSqlcToCoreTemplateChannel(ch sqlc.TemplateChannel) (*core.TemplateChannel, error) {
+	content, err := conversion.MapFromJSONB(ch.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &core.TemplateChannel{
+		ID:                 utils.UUIDToString(ch.ID),
+		TemplateID:         utils.UUIDToString(ch.TemplateID),
+		OverrideProviderID: utils.UUIDToString(ch.ChannelConfigID),
+		Channel:            ch.Channel,
+		Content:            content,
+		IsActive:           ch.IsActive.Bool,
+	}, nil
 }

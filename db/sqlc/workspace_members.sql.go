@@ -107,7 +107,6 @@ func (q *Queries) GetWorkspaceMemberByID(ctx context.Context, id pgtype.UUID) (W
 }
 
 const getWorkspaceMemberByUserID = `-- name: GetWorkspaceMemberByUserID :one
-
 select id, workspace_id, user_id, role, invited_by, joined_at, created_at from workspace_members where user_id = $1 limit 1
 `
 
@@ -122,6 +121,45 @@ func (q *Queries) GetWorkspaceMemberByUserID(ctx context.Context, userID pgtype.
 		&i.InvitedBy,
 		&i.JoinedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getWorkspaceMemberWithDetailsByUserID = `-- name: GetWorkspaceMemberWithDetailsByUserID :one
+SELECT 
+    m.workspace_id,
+    m.user_id, 
+    u.full_name as name, 
+    u.email, 
+    u.avatar_url, 
+    m.role, 
+    m.joined_at
+FROM workspace_members m
+JOIN users u ON m.user_id = u.id
+WHERE m.user_id = $1 LIMIT 1
+`
+
+type GetWorkspaceMemberWithDetailsByUserIDRow struct {
+	WorkspaceID pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	UserID      pgtype.UUID        `db:"user_id" json:"user_id"`
+	Name        string             `db:"name" json:"name"`
+	Email       string             `db:"email" json:"email"`
+	AvatarUrl   pgtype.Text        `db:"avatar_url" json:"avatar_url"`
+	Role        string             `db:"role" json:"role"`
+	JoinedAt    pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
+}
+
+func (q *Queries) GetWorkspaceMemberWithDetailsByUserID(ctx context.Context, userID pgtype.UUID) (GetWorkspaceMemberWithDetailsByUserIDRow, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceMemberWithDetailsByUserID, userID)
+	var i GetWorkspaceMemberWithDetailsByUserIDRow
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.UserID,
+		&i.Name,
+		&i.Email,
+		&i.AvatarUrl,
+		&i.Role,
+		&i.JoinedAt,
 	)
 	return i, err
 }
@@ -240,9 +278,18 @@ func (q *Queries) GetWorkspaceOwnerEmails(ctx context.Context, workspaceID pgtyp
 const updateMemberRole = `-- name: UpdateMemberRole :one
 UPDATE workspace_members
 SET role = $3
-WHERE workspace_id = $1
-AND user_id = $2
-RETURNING id, workspace_id, user_id, role, invited_by, joined_at, created_at
+FROM users u
+WHERE workspace_members.workspace_id = $1
+  AND workspace_members.user_id = $2
+  AND workspace_members.user_id = u.id
+RETURNING 
+    workspace_members.workspace_id,
+    workspace_members.user_id, 
+    u.full_name as name, 
+    u.email, 
+    u.avatar_url, 
+    workspace_members.role, 
+    workspace_members.joined_at
 `
 
 type UpdateMemberRoleParams struct {
@@ -251,17 +298,27 @@ type UpdateMemberRoleParams struct {
 	Role        string      `db:"role" json:"role"`
 }
 
-func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) (WorkspaceMember, error) {
+type UpdateMemberRoleRow struct {
+	WorkspaceID pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	UserID      pgtype.UUID        `db:"user_id" json:"user_id"`
+	Name        string             `db:"name" json:"name"`
+	Email       string             `db:"email" json:"email"`
+	AvatarUrl   pgtype.Text        `db:"avatar_url" json:"avatar_url"`
+	Role        string             `db:"role" json:"role"`
+	JoinedAt    pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
+}
+
+func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) (UpdateMemberRoleRow, error) {
 	row := q.db.QueryRow(ctx, updateMemberRole, arg.WorkspaceID, arg.UserID, arg.Role)
-	var i WorkspaceMember
+	var i UpdateMemberRoleRow
 	err := row.Scan(
-		&i.ID,
 		&i.WorkspaceID,
 		&i.UserID,
+		&i.Name,
+		&i.Email,
+		&i.AvatarUrl,
 		&i.Role,
-		&i.InvitedBy,
 		&i.JoinedAt,
-		&i.CreatedAt,
 	)
 	return i, err
 }

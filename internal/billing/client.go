@@ -80,7 +80,7 @@ type grpcClient struct {
 
 func NewGRPCClient(addr string,log zerolog.Logger) (Client, error) {
 	fmt.Println("grpc port", addr)
-	conn, err := grpc.NewClient("host.docker.internal:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	if err != nil {
 		return nil, err

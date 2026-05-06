@@ -13,6 +13,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
+	"github.com/NIROOZbx/notification-engine/pkg/parallel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -80,21 +81,31 @@ func (w *workspaceService) GetOrCreate(ctx context.Context, userID pgtype.UUID, 
 }
 
 func (w *workspaceService) fetchExistingWorkspace(ctx context.Context, workspaceID pgtype.UUID, role string) (*WorkspaceWithRole, error) {
-	existingWorkspace, findErr := w.repo.GetWorkspaceWithPlan(ctx, workspaceID)
-	if findErr != nil {
-		return nil, fmt.Errorf("fetching workspace: %w", findErr)
-	}
 
-	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching environments: %w", err)
-	}
+	envs, existingWorkspace, err := parallel.Query2(ctx,
+		func(ctx context.Context) ([]sqlc.Environment, error) {
+			envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspaceID)
+			if err != nil {
+				return nil, fmt.Errorf("fetching environments: %w", err)
+			}
+			return envs, nil
+		},
+		func(ctx context.Context) (sqlc.GetWorkspaceWithPlanRow, error) {
+			ws, err := w.repo.GetWorkspaceWithPlan(ctx, workspaceID)
+			if err != nil {
+				return ws, fmt.Errorf("fetching workspace: %w", err)
+			}
+			return ws, nil
+		},
+	)
 
-	result := &WorkspaceWithRole{
+	if err!=nil{
+		return  nil,err
+	}
+	return &WorkspaceWithRole{
 		Workspace: mapToWorkspaceResponseFromRow(existingWorkspace, envs),
 		Role:      role,
-	}
-	return result, nil
+	}, nil
 }
 
 func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.UUID, name string) (*WorkspaceWithRole, error) {
@@ -170,31 +181,42 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 }
 
 func (w *workspaceService) GetByID(ctx context.Context, workspaceID pgtype.UUID) (*dtos.WorkspaceResponse, error) {
-	workspace, err := w.repo.GetWorkspaceWithPlan(ctx, workspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("finding workspace: %w", err)
-	}
+	workspace, envs, err := parallel.Query2(ctx,
+		func(c context.Context) (sqlc.GetWorkspaceWithPlanRow, error) {
+			return w.repo.GetWorkspaceWithPlan(c, workspaceID)
+		},
+		func(c context.Context) ([]sqlc.Environment, error) {
+			return w.repo.GetEnvironmentsByWorkspace(c, workspaceID)
+		},
+	)
 
-	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspaceID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching environments: %w", err)
+		return nil, fmt.Errorf("failed to fetch workspace details: %w", err)
 	}
 
 	return mapToWorkspaceResponseFromRow(workspace, envs), nil
 }
 
 func (w *workspaceService) GetBySlug(ctx context.Context, slug string) (*dtos.WorkspaceResponse, error) {
-	workspace, err := w.repo.GetWorkspaceBySlug(ctx, slug)
+	rows, err := w.repo.GetWorkspaceWithEnvironmentsBySlug(ctx, slug)
 	if err != nil {
 		return nil, fmt.Errorf("finding workspace by slug: %w", err)
 	}
-
-	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, workspace.ID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching environments: %w", err)
+	if len(rows) == 0 {
+		return nil, apperrors.ErrNotFound
 	}
 
-	return mapToWorkspaceResponse(workspace, "", envs), nil
+	workspace := rows[0].Workspace
+	planName := rows[0].PlanName
+
+	var envs []sqlc.Environment
+	for _, row := range rows {
+		if row.Environment.ID.Valid {
+			envs = append(envs, row.Environment)
+		}
+	}
+
+	return mapToWorkspaceResponse(workspace, planName, envs), nil
 }
 
 func (w *workspaceService) UpdateName(ctx context.Context, workspaceID pgtype.UUID, name string) (*dtos.WorkspaceResponse, error) {
@@ -282,47 +304,45 @@ func (w *workspaceService) UpdateMemberRole(ctx context.Context, params UpdateMe
 		UserID:      params.TargetUserID,
 		Role:        params.Role,
 	}
-	_, err = w.repo.UpdateMemberRole(ctx, params2)
+	updatedMember, err := w.repo.UpdateMemberRole(ctx, params2)
 
 	if err != nil {
 		return nil, fmt.Errorf("updating member role: %w", err)
 	}
 
-	// Fetch detailed record to map to DTO
-	rows, err := w.repo.GetWorkspaceMembers(ctx, params.WorkspaceID)
-	if err != nil {
-		return nil, err
+	resp := dtos.WorkspaceMemberResponse{
+		WorkspaceID: utils.UUIDToString(updatedMember.WorkspaceID),
+		UserID:      utils.UUIDToString(updatedMember.UserID),
+		Name:        updatedMember.Name,
+		Email:       updatedMember.Email,
+		AvatarURL:   updatedMember.AvatarUrl.String,
+		Role:        updatedMember.Role,
+		JoinedAt:    updatedMember.JoinedAt.Time,
 	}
 
-	for _, m := range rows {
-		if m.UserID == params.TargetUserID {
-			resp := mapToMemberResponse(m)
-			return &resp, nil
-		}
-	}
-
-	return nil, fmt.Errorf("updated member not found")
+	return &resp, nil
 }
 
 func (w *workspaceService) GetWorkspaceMemberByUserID(ctx context.Context, userID pgtype.UUID) (*dtos.WorkspaceMemberResponse, error) {
-	member, err := w.repo.GetWorkspaceMemberByUserID(ctx, userID)
+	member, err := w.repo.GetWorkspaceMemberWithDetailsByUserID(ctx, userID)
 	if err != nil {
-		return nil, err
-	}
-
-	rows, err := w.repo.GetWorkspaceMembers(ctx, member.WorkspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, m := range rows {
-		if m.UserID == userID {
-			resp := mapToMemberResponse(m)
-			return &resp, nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.ErrNotFound
 		}
+		return nil, fmt.Errorf("fetching member details: %w", err)
 	}
 
-	return nil, pgx.ErrNoRows
+	resp := dtos.WorkspaceMemberResponse{
+		WorkspaceID: utils.UUIDToString(member.WorkspaceID),
+		UserID:      utils.UUIDToString(member.UserID),
+		Name:        member.Name,
+		Email:       member.Email,
+		AvatarURL:   member.AvatarUrl.String,
+		Role:        member.Role,
+		JoinedAt:    member.JoinedAt.Time,
+	}
+
+	return &resp, nil
 }
 
 func (w *workspaceService) RemoveMember(ctx context.Context, params RemoveMemberParams) error {

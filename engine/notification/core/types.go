@@ -39,6 +39,18 @@ type CreateAttemptParams struct {
 	ProviderMessageID string
 	DurationMs        int
 }
+type GetContactWithPreferenceParams struct {
+	WorkspaceID    string
+	EnvironmentID  string
+	ExternalUserID string
+	Channel        string
+	EventType      string
+}
+
+type ContactPreferencePair struct {
+    Contact    *Contact
+    Preference *Preference
+}
 
 type Template struct {
 	ID          string

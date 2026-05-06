@@ -11,6 +11,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
+	"github.com/NIROOZbx/notification-engine/pkg/parallel"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -64,22 +65,24 @@ func NewAPIKeyService(repo repositories.APIKeyRepository) APIKeyService {
 
 func (a *apiKeyService) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*dtos.CreateAPIKeyResponse, error) {
 
-	env, err := a.repo.GetEnvironment(ctx, params.EnvironmentID)
+	env, workspace, count, err := parallel.Query3(ctx,
+		func(c context.Context) (sqlc.Environment, error) {
+			return a.repo.GetEnvironment(c, params.EnvironmentID)
+		},
+		func(c context.Context) (sqlc.GetWorkspaceWithPlanRow, error) {
+			return a.repo.GetWorkspaceWithPlan(c, params.WorkspaceID)
+		},
+		func(c context.Context) (int64, error) {
+			return a.repo.CountActiveKeys(c, params.WorkspaceID)
+		},
+	)
+
 	if err != nil {
 		return nil, err
 	}
 
 	if utils.UUIDToString(env.WorkspaceID) != utils.UUIDToString(params.WorkspaceID) {
 		return nil, apperrors.ErrForbidden
-	}
-	workspace, err := a.repo.GetWorkspaceWithPlan(ctx, params.WorkspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch workspace plan: %w", err)
-	}
-
-	count, err := a.repo.CountActiveKeys(ctx, params.WorkspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count api keys: %w", err)
 	}
 
 	if int(count) >= int(workspace.ApiKeysLimit) {

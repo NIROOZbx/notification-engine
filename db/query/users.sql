@@ -70,5 +70,16 @@ SELECT
 FROM users u
 LEFT JOIN workspace_members m ON u.id = m.user_id
 LEFT JOIN workspaces w ON m.workspace_id = w.id
-WHERE u.id = $1 
+WHERE u.id = $1; 
+
+-- name: GetAuthContextByEmail :one
+SELECT sqlc.embed(u),
+    m.role,
+    w.id AS workspace_id,
+    w.name AS workspace_name,
+    w.slug AS workspace_slug
+FROM users as u
+LEFT JOIN workspace_members m ON u.id = m.user_id
+LEFT JOIN workspaces w ON m.workspace_id = w.id
+WHERE u.email = $1 
 LIMIT 1;

@@ -1,17 +1,6 @@
 -- name: FindWorkspaceByID :one
 SELECT * from workspaces where id = $1 LIMIT 1;
 
--- name: GetWorkspaceWithPlanName :one
-SELECT 
-    w.id, 
-    w.name, 
-    w.slug, 
-    p.name as plan_name,
-    w.created_at
-FROM workspaces w
-JOIN plans p ON w.plan_id = p.id
-WHERE w.id = $1;
-
 -- name: GetWorkspaceBySlug :one
 SELECT * FROM workspaces
 WHERE slug = $1
@@ -59,3 +48,13 @@ SELECT
 FROM workspaces w
 JOIN plans p ON p.id = w.plan_id
 WHERE w.id = $1;
+
+-- name: GetWorkspaceWithEnvironmentsBySlug :many
+SELECT 
+    sqlc.embed(w), 
+    sqlc.embed(e),
+    p.name as plan_name
+FROM workspaces w
+JOIN plans p ON p.id = w.plan_id
+LEFT JOIN environments e ON w.id = e.workspace_id
+WHERE w.slug = $1;

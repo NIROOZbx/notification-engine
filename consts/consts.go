@@ -48,6 +48,7 @@ var ValidProvidersByChannel = map[string]map[string]bool{
 		"sendgrid": true,
 		"mailgun":  true,
 		"ses":      true,
+		"resend":true,
 	},
 	ChannelSMS: {
 		"twilio": true,

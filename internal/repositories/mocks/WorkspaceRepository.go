@@ -316,6 +316,34 @@ func (_m *WorkspaceRepository) GetWorkspaceMemberByUserID(ctx context.Context, u
 	return r0, r1
 }
 
+// GetWorkspaceMemberWithDetailsByUserID provides a mock function with given fields: ctx, userID
+func (_m *WorkspaceRepository) GetWorkspaceMemberWithDetailsByUserID(ctx context.Context, userID pgtype.UUID) (sqlc.GetWorkspaceMemberWithDetailsByUserIDRow, error) {
+	ret := _m.Called(ctx, userID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetWorkspaceMemberWithDetailsByUserID")
+	}
+
+	var r0 sqlc.GetWorkspaceMemberWithDetailsByUserIDRow
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) (sqlc.GetWorkspaceMemberWithDetailsByUserIDRow, error)); ok {
+		return rf(ctx, userID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, pgtype.UUID) sqlc.GetWorkspaceMemberWithDetailsByUserIDRow); ok {
+		r0 = rf(ctx, userID)
+	} else {
+		r0 = ret.Get(0).(sqlc.GetWorkspaceMemberWithDetailsByUserIDRow)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, pgtype.UUID) error); ok {
+		r1 = rf(ctx, userID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetWorkspaceMembers provides a mock function with given fields: ctx, workspaceID
 func (_m *WorkspaceRepository) GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.GetWorkspaceMembersWithDetailsRow, error) {
 	ret := _m.Called(ctx, workspaceID)
@@ -339,6 +367,36 @@ func (_m *WorkspaceRepository) GetWorkspaceMembers(ctx context.Context, workspac
 
 	if rf, ok := ret.Get(1).(func(context.Context, pgtype.UUID) error); ok {
 		r1 = rf(ctx, workspaceID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetWorkspaceWithEnvironmentsBySlug provides a mock function with given fields: ctx, slug
+func (_m *WorkspaceRepository) GetWorkspaceWithEnvironmentsBySlug(ctx context.Context, slug string) ([]sqlc.GetWorkspaceWithEnvironmentsBySlugRow, error) {
+	ret := _m.Called(ctx, slug)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetWorkspaceWithEnvironmentsBySlug")
+	}
+
+	var r0 []sqlc.GetWorkspaceWithEnvironmentsBySlugRow
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]sqlc.GetWorkspaceWithEnvironmentsBySlugRow, error)); ok {
+		return rf(ctx, slug)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) []sqlc.GetWorkspaceWithEnvironmentsBySlugRow); ok {
+		r0 = rf(ctx, slug)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]sqlc.GetWorkspaceWithEnvironmentsBySlugRow)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, slug)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -375,22 +433,22 @@ func (_m *WorkspaceRepository) GetWorkspaceWithPlan(ctx context.Context, id pgty
 }
 
 // UpdateMemberRole provides a mock function with given fields: ctx, arg
-func (_m *WorkspaceRepository) UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.WorkspaceMember, error) {
+func (_m *WorkspaceRepository) UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.UpdateMemberRoleRow, error) {
 	ret := _m.Called(ctx, arg)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateMemberRole")
 	}
 
-	var r0 sqlc.WorkspaceMember
+	var r0 sqlc.UpdateMemberRoleRow
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, sqlc.UpdateMemberRoleParams) (sqlc.WorkspaceMember, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, sqlc.UpdateMemberRoleParams) (sqlc.UpdateMemberRoleRow, error)); ok {
 		return rf(ctx, arg)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, sqlc.UpdateMemberRoleParams) sqlc.WorkspaceMember); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, sqlc.UpdateMemberRoleParams) sqlc.UpdateMemberRoleRow); ok {
 		r0 = rf(ctx, arg)
 	} else {
-		r0 = ret.Get(0).(sqlc.WorkspaceMember)
+		r0 = ret.Get(0).(sqlc.UpdateMemberRoleRow)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, sqlc.UpdateMemberRoleParams) error); ok {

@@ -8,13 +8,15 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
+	"github.com/NIROOZbx/notification-engine/pkg/parallel"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type templateService struct {
-	repo          repositories.TemplateRepository
-	layoutRepo    repositories.LayoutRepo
-	workspaceRepo repositories.WorkspaceRepository
+	repo              repositories.TemplateRepository
+	layoutRepo        repositories.LayoutRepo
+	workspaceRepo     repositories.WorkspaceRepository
+	channelConfigRepo repositories.ChannelConfigRepo
 }
 
 type TemplateService interface {
@@ -31,16 +33,16 @@ type TemplateService interface {
 	DeleteChannel(ctx context.Context, id, templateID, workspaceID pgtype.UUID) error
 }
 
-
 var validStatuses = map[string]bool{
 	"draft": true, "live": true, "dropped": true,
 }
 
-func NewTemplateService(repo repositories.TemplateRepository, layoutRepo repositories.LayoutRepo, workspaceRepo repositories.WorkspaceRepository) *templateService {
+func NewTemplateService(repo repositories.TemplateRepository, layoutRepo repositories.LayoutRepo, workspaceRepo repositories.WorkspaceRepository, channelConfigRepo repositories.ChannelConfigRepo) *templateService {
 	return &templateService{
-		repo:          repo,
-		layoutRepo:    layoutRepo,
-		workspaceRepo: workspaceRepo,
+		repo:              repo,
+		layoutRepo:        layoutRepo,
+		workspaceRepo:     workspaceRepo,
+		channelConfigRepo: channelConfigRepo,
 	}
 }
 
@@ -81,16 +83,19 @@ func (s *templateService) Update(ctx context.Context, params domain.UpdateTempla
 		return nil, fmt.Errorf("%w: invalid status %s", apperrors.ErrInvalidInput, *params.Status)
 	}
 
-	current, err := s.repo.GetByID(ctx, params.ID, params.WorkspaceID)
+	current, hasActive, err := parallel.Query2(ctx,
+		func(ctx context.Context) (*domain.Template, error) {
+			return s.repo.GetByID(ctx, params.ID, params.WorkspaceID)
+		},
+		func(ctx context.Context) (bool, error) {
+			return s.repo.HasActiveChannels(ctx, params.ID)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	if params.Status != nil && *params.Status == "live" && current.Status != "live" {
-		hasActive, err := s.repo.HasActiveChannels(ctx, params.ID)
-		if err != nil {
-			return nil, err
-		}
 		if !hasActive {
 			return nil, apperrors.ErrNoActiveChannels
 		}
@@ -153,17 +158,31 @@ func (s *templateService) UpdateChannel(ctx context.Context, params domain.Updat
 		return nil, fmt.Errorf("%w: content cannot be empty", apperrors.ErrInvalidInput)
 	}
 
-	channel, err := s.repo.GetChannelByID(ctx, params.ID)
+	channel, template, err := parallel.Query2(ctx,
+		func(c context.Context) (*domain.TemplateChannel, error) {
+			return s.repo.GetChannelByID(c, params.ID)
+		},
+		func(c context.Context) (*domain.Template, error) {
+			return s.repo.GetByID(c, params.TemplateID, params.WorkspaceID)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	if channel.TemplateID != params.TemplateID {
 		return nil, apperrors.ErrNotFound
 	}
 
-	template, err := s.repo.GetByID(ctx, params.TemplateID, params.WorkspaceID)
-	if err != nil {
-		return nil, err
+	if params.ChannelConfigID != nil && params.ChannelConfigID.Valid {
+		config, err := s.channelConfigRepo.GetChannelConfigByID(ctx, *params.ChannelConfigID, params.WorkspaceID)
+		if err != nil {
+			return nil, apperrors.ErrForbidden
+		}
+
+		if config.Channel != channel.Channel {
+			return nil, fmt.Errorf("%w: channel config type mismatch", apperrors.ErrInvalidInput)
+		}
 	}
 
 	if template.Status == "dropped" {
@@ -192,17 +211,19 @@ func (s *templateService) UpdateChannel(ctx context.Context, params domain.Updat
 
 func (s *templateService) DeleteChannel(ctx context.Context, id, templateID, workspaceID pgtype.UUID) error {
 
-	channel, err := s.repo.GetChannelByID(ctx, id)
+	channel, template, err := parallel.Query2(ctx,
+		func(c context.Context) (*domain.TemplateChannel, error) {
+			return s.repo.GetChannelByID(c, id)
+		},
+		func(c context.Context) (*domain.Template, error) {
+			return s.repo.GetByID(c, templateID, workspaceID)
+		},
+	)
 	if err != nil {
 		return err
 	}
 	if channel.TemplateID != templateID {
 		return apperrors.ErrNotFound
-	}
-
-	template, err := s.repo.GetByID(ctx, templateID, workspaceID)
-	if err != nil {
-		return err
 	}
 
 	if template.Status == "dropped" {

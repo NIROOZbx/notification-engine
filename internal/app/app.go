@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"net/http"
 	"sync"
 
 	"github.com/NIROOZbx/notification-engine/config"
@@ -62,6 +63,7 @@ type RouterDeps struct {
 	PlanHandler       *handlers.PlanHandler
 	BillingHandler    *handlers.BillingHandler
 	AnalyticsHandler  *handlers.AnalyticsHandler
+	Logger            zerolog.Logger
 }
 
 func StartApp(cfg *config.Config) (*App, error) {
@@ -95,7 +97,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	httpClient := httpclient.NewClient()
 
-	billingClient, err := billing.NewGRPCClient(cfg.GRPC.GRPCPort, appLogger)
+	billingClient, err := billing.NewGRPCClient(cfg.GRPC.GRPCAddr, appLogger)
 
 	if err != nil {
 		appLogger.Fatal().Err(err).Msg("failed to connect to billing service")
@@ -128,9 +130,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
 	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
 	subscriberSvc := services.NewSubscriberService(subscriberRepo)
-	templateSvc := services.NewTemplateService(templateRepo, layoutRepo, wspRepo)
-	layoutSvc := services.NewLayoutService(layoutRepo, wspRepo)
 	chnlConfigSvc := services.NewChannelConfigService(chnlConfigRepo, cfg.SecretKey)
+	templateSvc := services.NewTemplateService(templateRepo, layoutRepo, wspRepo, chnlConfigRepo)
+	layoutSvc := services.NewLayoutService(layoutRepo, wspRepo)
 	planSvc := services.NewPlanService(planRepo)
 	billingSvc := services.NewBillingService(billingClient)
 	analyticsSvc := services.NewAnalyticsService(analyticsRepo, appLogger)
@@ -156,9 +158,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	s := scheduler.NewScheduler(producer, appLogger, schedulerRepo, consts.Interval)
 
-	engine.RegisterProvider(email.NewSendGridProvider(appLogger, httpClient))
-	engine.RegisterProvider(email.NewSESProvider(appLogger, httpClient))
-	engine.RegisterProvider(sms.NewTwilioProvider(appLogger, httpClient))
+	setUpProviders(engine, appLogger, httpClient)
 
 	consumers := setUpConsumers(kafkaCfg.Broker, engine, kafkaCfg.GroupID, appLogger)
 
@@ -212,6 +212,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 		PlanHandler:       planHandler,
 		BillingHandler:    billingHandler,
 		AnalyticsHandler:  analyticsHandler,
+		Logger:            appLogger,
 	}
 
 	SetUpRoutes(&r, &cfg.CORS)
@@ -227,6 +228,13 @@ func StartApp(cfg *config.Config) (*App, error) {
 		Producer:  producer,
 		wg:        &sync.WaitGroup{},
 	}, nil
+}
+
+func setUpProviders(e *core.Engine, log zerolog.Logger, httpClient *http.Client) {
+	e.RegisterProvider(email.NewSendGridProvider(log, httpClient))
+	e.RegisterProvider(email.NewSESProvider(log, httpClient))
+	e.RegisterProvider(email.NewResendProvider(log, httpClient))
+	e.RegisterProvider(sms.NewTwilioProvider(log, httpClient))
 }
 
 func setUpMockProviders(e *core.Engine, log zerolog.Logger) {

@@ -95,6 +95,57 @@ func (q *Queries) GetWorkspaceBySlug(ctx context.Context, slug string) (Workspac
 	return i, err
 }
 
+const getWorkspaceWithEnvironmentsBySlug = `-- name: GetWorkspaceWithEnvironmentsBySlug :many
+SELECT 
+    w.id, w.name, w.slug, w.plan_id, w.notif_count_month, w.billing_cycle_start, w.created_at, w.updated_at, 
+    e.id, e.workspace_id, e.name, e.created_at,
+    p.name as plan_name
+FROM workspaces w
+JOIN plans p ON p.id = w.plan_id
+LEFT JOIN environments e ON w.id = e.workspace_id
+WHERE w.slug = $1
+`
+
+type GetWorkspaceWithEnvironmentsBySlugRow struct {
+	Workspace   Workspace   `db:"workspace" json:"workspace"`
+	Environment Environment `db:"environment" json:"environment"`
+	PlanName    string      `db:"plan_name" json:"plan_name"`
+}
+
+func (q *Queries) GetWorkspaceWithEnvironmentsBySlug(ctx context.Context, slug string) ([]GetWorkspaceWithEnvironmentsBySlugRow, error) {
+	rows, err := q.db.Query(ctx, getWorkspaceWithEnvironmentsBySlug, slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetWorkspaceWithEnvironmentsBySlugRow
+	for rows.Next() {
+		var i GetWorkspaceWithEnvironmentsBySlugRow
+		if err := rows.Scan(
+			&i.Workspace.ID,
+			&i.Workspace.Name,
+			&i.Workspace.Slug,
+			&i.Workspace.PlanID,
+			&i.Workspace.NotifCountMonth,
+			&i.Workspace.BillingCycleStart,
+			&i.Workspace.CreatedAt,
+			&i.Workspace.UpdatedAt,
+			&i.Environment.ID,
+			&i.Environment.WorkspaceID,
+			&i.Environment.Name,
+			&i.Environment.CreatedAt,
+			&i.PlanName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getWorkspaceWithPlan = `-- name: GetWorkspaceWithPlan :one
 SELECT 
     w.id, 
@@ -136,39 +187,6 @@ func (q *Queries) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (Get
 		&i.ApiKeysLimit,
 		&i.MaxTemplates,
 		&i.MaxLayouts,
-	)
-	return i, err
-}
-
-const getWorkspaceWithPlanName = `-- name: GetWorkspaceWithPlanName :one
-SELECT 
-    w.id, 
-    w.name, 
-    w.slug, 
-    p.name as plan_name,
-    w.created_at
-FROM workspaces w
-JOIN plans p ON w.plan_id = p.id
-WHERE w.id = $1
-`
-
-type GetWorkspaceWithPlanNameRow struct {
-	ID        pgtype.UUID        `db:"id" json:"id"`
-	Name      string             `db:"name" json:"name"`
-	Slug      string             `db:"slug" json:"slug"`
-	PlanName  string             `db:"plan_name" json:"plan_name"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-}
-
-func (q *Queries) GetWorkspaceWithPlanName(ctx context.Context, id pgtype.UUID) (GetWorkspaceWithPlanNameRow, error) {
-	row := q.db.QueryRow(ctx, getWorkspaceWithPlanName, id)
-	var i GetWorkspaceWithPlanNameRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.PlanName,
-		&i.CreatedAt,
 	)
 	return i, err
 }

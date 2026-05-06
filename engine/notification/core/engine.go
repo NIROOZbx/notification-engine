@@ -14,6 +14,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/billing"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/encryptor"
+	"github.com/NIROOZbx/notification-engine/pkg/parallel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
@@ -177,13 +178,32 @@ func (e *Engine) ingestChannel(ctx context.Context, ic *ingestContext) error {
 		Str("external_user_id", ic.payload.ExternalUserID).
 		Logger()
 
-	if !ic.strategy.SkipBillingCheck() {
-		resp, err := e.billingClient.CheckLimit(ctx, ic.workspaceID, ic.envID, ic.ch.Channel)
+	channelKey := fmt.Sprintf("%s:%s", ic.payload.IdempotencyKey, ic.ch.Channel)
+	ic.channelKey = channelKey
 
-		if err != nil {
-			e.log.Warn().Err(err).Str("channel", ic.ch.Channel).Msg("billing check failed, allowing send")
-		} else if !resp.Allowed {
-			e.log.Warn().
+	resp, existingLog, cp, err := parallel.Query3(ctx,
+		func(ctx context.Context) (*billing.CheckLimitResponse, error) {
+			return e.billingClient.CheckLimit(ctx, ic.workspaceID, ic.envID, ic.ch.Channel)
+		},
+		func(ctx context.Context) (*NotificationLog, error) {
+			return e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
+		},
+		func(ctx context.Context) (*ContactPreferencePair, error) {
+			contact, preference, err := ic.strategy.ResolveContact(ctx, e.repo, ic)
+			return &ContactPreferencePair{
+				Contact:    contact,
+				Preference: preference,
+			}, err
+		})
+
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		l.Error().Err(err).Msg("parallel ingestion checks failed")
+		return err
+	}
+
+	if !ic.strategy.SkipBillingCheck() && resp != nil {
+		if !resp.Allowed {
+			l.Info().
 				Str("reason", resp.Reason).
 				Str("channel", ic.ch.Channel).
 				Msg("INGEST_SKIP: limit exceeded")
@@ -191,30 +211,22 @@ func (e *Engine) ingestChannel(ctx context.Context, ic *ingestContext) error {
 		}
 	}
 
-	channelKey := fmt.Sprintf("%s:%s", ic.payload.IdempotencyKey, ic.ch.Channel)
-	ic.channelKey = channelKey
-	_, err := e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
-	if err == nil {
+	if existingLog != nil {
 		l.Info().Msg("duplicate idempotency key, skipping")
 		return nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		l.Error().Err(err).Msg("idempotency check failed")
-		return err
-	}
-	contact, err := ic.strategy.ResolveContact(ctx, e.repo, ic)
-	if err != nil {
-		return err
+
+	if cp == nil || cp.Contact == nil {
+		return fmt.Errorf("failed to resolve contact")
 	}
 
-	ic.contact = contact
-	l.Info().Str("recipient", contact.ContactValue).Msg("found recipient contact")
+	ic.contact = cp.Contact
+	ic.preference = cp.Preference
+	l.Info().Str("recipient", ic.contact.ContactValue).Msg("found recipient contact")
 
-	if !ic.strategy.SkipOptOut() {
-		if e.isOptedOut(ctx, contact.ID, ic.ch.Channel, ic.payload.EventType, l) {
-			l.Info().Msg("user has opted out of this channel/event")
-			return nil
-		}
+	if !ic.strategy.SkipOptOut() && ic.preference != nil && !ic.preference.IsEnabled {
+		l.Info().Msg("user has opted out of this channel/event")
+		return nil
 	}
 
 	return e.createAndPublish(ctx, ic)
@@ -278,7 +290,6 @@ func (e *Engine) publishToKafka(ctx context.Context, notifLog *NotificationLog, 
 	return nil
 }
 
-
 func (e *Engine) ProcessDLQ(ctx context.Context, event *models.NotificationEvent) error {
 	e.log.Error().
 		Str("log_id", event.NotificationLogID).
@@ -316,13 +327,7 @@ func (e *Engine) Process(ctx context.Context, event *models.NotificationEvent) e
 		return err
 	}
 
-	templateChannel, err := e.repo.GetTemplateChannel(ctx, notifLog.TemplateID, notifLog.Channel)
-	if err != nil {
-		e.updateLogStatus(ctx, notifLog.ID, "failed")
-		return err
-	}
-
-	template, err := e.repo.GetTemplateByID(ctx, notifLog.WorkspaceID, templateChannel.TemplateID)
+	template, templateChannel, err := e.repo.GetTemplateWithChannel(ctx, notifLog.TemplateID, notifLog.WorkspaceID, notifLog.Channel)
 	if err != nil {
 		e.updateLogStatus(ctx, notifLog.ID, "failed")
 		return err
@@ -430,21 +435,6 @@ func (e *Engine) Process(ctx context.Context, event *models.NotificationEvent) e
 	}
 
 	return nil
-}
-
-func (e *Engine) isOptedOut(ctx context.Context, userID, channel, eventType string, l zerolog.Logger) bool {
-	prefs, err := e.repo.GetPreferencesBySubscriberAndChannel(ctx, userID, channel, eventType)
-	if err != nil {
-		l.Error().Err(err).Msg("failed to fetch user preferences, defaulting to opt-in")
-		return false
-	}
-
-	for _, p := range prefs {
-		if !p.IsEnabled {
-			return true
-		}
-	}
-	return false
 }
 
 func (e *Engine) RegisterProvider(p provider.Provider) {

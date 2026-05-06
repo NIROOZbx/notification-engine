@@ -30,6 +30,7 @@ type UserService interface {
 	FindUserByProviderID(ctx context.Context, provider, providerID string) (*sqlc.User, error)
 	CreateUser(ctx context.Context, params CreateUser) (*sqlc.User, error)
     GetFullUserDetails(ctx context.Context,userID pgtype.UUID)(*sqlc.GetUserWithWorkspaceRow,error)
+	GetAuthContextByEmail(ctx context.Context, email string) (*sqlc.GetAuthContextByEmailRow, error)
 }
 
 type userService struct {
@@ -44,6 +45,14 @@ func ( u *userService) GetFullUserDetails(ctx context.Context,userID pgtype.UUID
     }
     return &row, nil
 
+}
+
+func (u *userService) GetAuthContextByEmail(ctx context.Context, email string) (*sqlc.GetAuthContextByEmailRow, error) {
+	row, err := u.repo.GetAuthContextByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 func (u *userService) CreateUser(ctx context.Context, params CreateUser) (*sqlc.User, error) {

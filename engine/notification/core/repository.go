@@ -2,12 +2,14 @@ package core
 
 import (
 	"context"
-
 )
+
+
 
 type Repository interface {
 	GetTemplateByEventType(ctx context.Context, workspaceID, envID, eventType string) (*Template, error)
 	GetContactByExternalUserAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*Contact, error)
+	GetContactWithPreference(ctx context.Context, params GetContactWithPreferenceParams) (*Contact, *Preference, error)
 	GetWorkspaceOwners(ctx context.Context, workspaceID string) ([]Contact, error)
 	GetPreferencesBySubscriberAndChannel(ctx context.Context, subscriberID, channel, eventType string) ([]Preference, error)
 	CreateNotificationLog(ctx context.Context, params CreateLogParams) (*NotificationLog, error)
@@ -22,6 +24,7 @@ type Repository interface {
 	GetChannelConfigByID(ctx context.Context, channelConfigID, workspaceID string) (*ChannelConfig, error)
 	GetLayoutByID(ctx context.Context, layoutID, workspaceID string) (*Layout, error)
 	GetTemplateByID(ctx context.Context, workspaceID, templateID string) (*Template, error)
+	GetTemplateWithChannel(ctx context.Context, templateID, workspaceID, channel string) (*Template, *TemplateChannel, error)
 	GetDefaultChannelConfig(ctx context.Context, workspaceID, channel string) (*ChannelConfig, error)
 	GetProductionEnvironmentID(ctx context.Context, workspaceID string) (string, error)
 }

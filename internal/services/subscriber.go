@@ -12,7 +12,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/conversion"
-	"golang.org/x/sync/errgroup"
+	"github.com/NIROOZbx/notification-engine/pkg/parallel"
 )
 
 type ContactInput struct {
@@ -146,25 +146,17 @@ func (s *subscriberService) List(ctx context.Context, workspaceID, environmentID
 		return nil, fmt.Errorf("%w: environment id", apperrors.ErrInvalidInput)
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
+	offset := (page - 1) * pageSize
+	subscribers, totalCount, err := parallel.Query2(ctx,
+		func(c context.Context) ([]*domain.Subscriber, error) {
+			return s.repo.ListSubscribers(c, workspaceUUID, envUUID, pageSize, offset)
+		},
+		func(c context.Context) (int64, error) {
+			return s.repo.CountSubscribers(c, workspaceUUID, envUUID)
+		},
+	)
 
-	var subscribers []*domain.Subscriber
-	var totalCount int64
-
-	g.Go(func() error {
-		var err error
-		offset := (page - 1) * pageSize
-		subscribers, err = s.repo.ListSubscribers(gctx, workspaceUUID, envUUID, pageSize, offset)
-		return err
-	})
-
-	g.Go(func() error {
-		var err error
-		totalCount, err = s.repo.CountSubscribers(gctx, workspaceUUID, envUUID)
-		return err
-	})
-
-	if err := g.Wait(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 

@@ -26,3 +26,14 @@ JOIN user_info ui ON up.subscriber_id = ui.id
 WHERE ui.workspace_id = $1 
   AND ui.environment_id = $2 
   AND ui.external_user_id = $3;
+
+
+-- name: GetContactWithPreference :one
+SELECT sqlc.embed(u),sqlc.embed(p) from user_info as u LEFT JOIN
+user_preferences as p on 
+u.id=p.subscriber_id AND
+p.event_type=$4 and p.channel=$5
+WHERE u.external_user_id=$1
+AND u.workspace_id=$2 
+AND u.environment_id=$3
+AND u.channel=$5;

@@ -9,6 +9,12 @@ The Notification Engine is a multi-tenant, Kafka-backed notification platform. I
 ## High-Level Architecture
 
 ```
+          ┌─────────────────────┐
+          │ NGINX (API Gateway) │
+          │(Rate Limiting/Routes)│
+          └────────┬────────────┘
+                   │
+                   ▼
 ┌─────────────────────┐        ┌──────────────────────┐
 │   Frontend / API    │        │    Billing Service   │
 │  (REST via Fiber)   │        │  (gRPC + Kafka)      │
@@ -82,7 +88,8 @@ notification-engine/
 │   ├── query/                  # Raw SQL files (sqlc input)
 │   └── sqlc/                   # Type-safe generated Go DB code
 ├── deployments/
-│   └── docker-compose.yml      # Full stack: Postgres, Redis, Kafka, Backend
+│   ├── docker-compose.yml      # Full stack: Postgres, Redis, Kafka, Backend
+│   └── nginx.conf              # NGINX API Gateway and Rate Limiting config
 ├── engine/
 │   └── notification/
 │       ├── core/
@@ -139,14 +146,17 @@ Instead of `if IsSystem { ... }` scattered throughout the engine, all behavioral
 ### 2. System Notification Isolation
 System alerts (e.g., subscription expiry, usage limits) are published from the Billing Service to `notifications.system`. The engine resolves workspace owners from the DB and routes alerts to them without any user-facing API involvement, preventing privilege escalation.
 
-### 3. Idempotency
+### 3. API Gateway & Security
+NGINX acts as the entry point to the platform. It handles API endpoint routing (e.g., separating `/api/v1/billing` from `/api/v1/`) and applies strict rate limits (e.g., 10 req/s with bursts) to protect the underlying Go fiber services from being overwhelmed.
+
+### 4. Idempotency
 Every notification channel gets a unique idempotency key (`{payload_key}:{channel}`). For system notifications with multiple owners, the key is further scoped per owner (`{payload_key}:{owner_email}`) to prevent collision.
 
-### 4. Provider Resolution
+### 5. Provider Resolution
 Provider resolution uses a priority chain:
 1. Template-level `OverrideProviderID`
 2. Workspace default provider for the channel
 3. Mock provider (test mode)
 
-### 5. Credential Encryption
+### 6. Credential Encryption
 Provider credentials (API keys, auth tokens) are encrypted at rest using AES-256. Decryption happens only at send time inside the engine.

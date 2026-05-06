@@ -13,6 +13,7 @@ type UserRepository interface {
 	FindUserByID(ctx context.Context, id pgtype.UUID) (sqlc.User, error)
 	FindUserByProviderID(ctx context.Context, arg sqlc.FindUserByProviderIDParams) (sqlc.User, error)
 	FindUserByEmail(ctx context.Context, email string) (sqlc.User, error)
+	GetAuthContextByEmail(ctx context.Context, email string) (sqlc.GetAuthContextByEmailRow, error)
 }
 
 type userRepo struct {
@@ -45,4 +46,8 @@ func (r *userRepo) FindUserByProviderID(ctx context.Context, arg sqlc.FindUserBy
 
 func (r *userRepo) FindUserByEmail(ctx context.Context, email string) (sqlc.User, error) {
 	return r.queries.FindUserByEmail(ctx, email)
+}
+
+func (r *userRepo) GetAuthContextByEmail(ctx context.Context, email string) (sqlc.GetAuthContextByEmailRow, error) {
+	return r.queries.GetAuthContextByEmail(ctx, email)
 }

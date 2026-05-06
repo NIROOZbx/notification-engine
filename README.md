@@ -10,6 +10,7 @@
 |-----------|------------|-------------|
 | **Language** | Go (Golang) | Core backend language |
 | **Framework** | Fiber v3 | High-performance HTTP web framework |
+| **API Gateway** | NGINX | Endpoint routing, Rate Limiting, Load Balancing |
 | **Database** | PostgreSQL | Relational database (`pgxpool` + `sqlc`) |
 | **Cache / Sessions** | Redis | In-memory store for sessions and data |
 | **Message Queue** | Apache Kafka (KRaft) | Async notification delivery pipeline |
@@ -38,6 +39,7 @@
 - **Subscription Lifecycle:** Expiry reminders and usage threshold alerts published to Kafka and routed to workspace owners.
 
 ### 🔐 Security & Auth
+- **API Gateway (NGINX):** Routes traffic and provides strict IP-based rate limiting to prevent abuse.
 - **Multi-Strategy Auth:** Email/Password + Google OAuth with BCrypt hashing.
 - **Rate Limiting:** Brute-force protection on auth endpoints.
 - **RBAC Middleware:** Role-based access control (`owner` / `admin`) on critical routes.
@@ -58,7 +60,8 @@ notification-engine/
 │   ├── query/                  # Raw SQL queries (sqlc input)
 │   └── sqlc/                   # sqlc-generated type-safe Go code
 ├── deployments/
-│   └── docker-compose.yml      # Postgres, Redis, Kafka, Backend
+│   ├── docker-compose.yml      # Postgres, Redis, Kafka, Backend
+│   └── nginx.conf              # NGINX rate limiting and routing config
 ├── engine/
 │   └── notification/
 │       ├── core/               # Engine core (ingest, process, strategy)

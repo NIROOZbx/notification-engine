@@ -10,6 +10,7 @@ import (
 
 type WorkspaceRepository interface {
 	GetWorkspaceMemberByUserID(ctx context.Context, userID pgtype.UUID) (sqlc.WorkspaceMember, error)
+	GetWorkspaceMemberWithDetailsByUserID(ctx context.Context, userID pgtype.UUID) (sqlc.GetWorkspaceMemberWithDetailsByUserIDRow, error)
 	FindWorkspaceByID(ctx context.Context, id pgtype.UUID) (sqlc.Workspace, error)
 	CreateWorkspace(ctx context.Context,arg sqlc.CreateWorkspaceParams) (sqlc.Workspace, error)
 	CreateWorkspaceMember(ctx context.Context, arg sqlc.CreateWorkspaceMemberParams) (sqlc.WorkspaceMember, error)
@@ -20,11 +21,12 @@ type WorkspaceRepository interface {
 
 	GetWorkspaceMembers(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.GetWorkspaceMembersWithDetailsRow, error)
 	GetMemberRole(ctx context.Context, arg sqlc.GetMemberRoleParams) (string, error)
-	UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.WorkspaceMember, error)
+	UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.UpdateMemberRoleRow, error)
 	DeleteWorkspaceMember(ctx context.Context, arg sqlc.DeleteWorkspaceMemberParams) error
 	GetOwnerCount(ctx context.Context,workspaceID pgtype.UUID)(int64,error)
     GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error)
 	GetEnvironmentsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.Environment, error)
+	GetWorkspaceWithEnvironmentsBySlug(ctx context.Context, slug string) ([]sqlc.GetWorkspaceWithEnvironmentsBySlugRow, error)
 
 	Atomic(ctx context.Context, fn func(repo WorkspaceRepository) error) error
 }
@@ -40,6 +42,10 @@ func NewWorkspaceRepository(queries *sqlc.Queries, pool *pgxpool.Pool) Workspace
 
 func (r *workspaceRepo) GetWorkspaceMemberByUserID(ctx context.Context, userID pgtype.UUID) (sqlc.WorkspaceMember, error) {
 	return r.queries.GetWorkspaceMemberByUserID(ctx, userID)
+}
+
+func (r *workspaceRepo) GetWorkspaceMemberWithDetailsByUserID(ctx context.Context, userID pgtype.UUID) (sqlc.GetWorkspaceMemberWithDetailsByUserIDRow, error) {
+	return r.queries.GetWorkspaceMemberWithDetailsByUserID(ctx, userID)
 }
 func (r *workspaceRepo) GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error) {
 	return r.queries.GetWorkspaceWithPlan(ctx, id)
@@ -99,7 +105,7 @@ func (r *workspaceRepo) GetMemberRole(ctx context.Context, arg sqlc.GetMemberRol
 	return r.queries.GetMemberRole(ctx, arg)
 }
 
-func (r *workspaceRepo) UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.WorkspaceMember, error) {
+func (r *workspaceRepo) UpdateMemberRole(ctx context.Context, arg sqlc.UpdateMemberRoleParams) (sqlc.UpdateMemberRoleRow, error) {
 	return r.queries.UpdateMemberRole(ctx, arg)
 }
 
@@ -114,4 +120,8 @@ func (r *workspaceRepo)GetOwnerCount(ctx context.Context,workspaceID pgtype.UUID
 
 func (r *workspaceRepo) GetEnvironmentsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]sqlc.Environment, error) {
 	return r.queries.GetEnvironmentsByWorkspace(ctx, workspaceID)
+}
+
+func (r *workspaceRepo) GetWorkspaceWithEnvironmentsBySlug(ctx context.Context, slug string) ([]sqlc.GetWorkspaceWithEnvironmentsBySlugRow, error) {
+	return r.queries.GetWorkspaceWithEnvironmentsBySlug(ctx, slug)
 }

@@ -77,42 +77,34 @@ func (a *authService) Register(ctx context.Context, req dtos.RegisterRequest) (*
 }
 
 func (a *authService) Login(ctx context.Context, req dtos.LoginRequest) (*dtos.AuthResponse, *jwt.Pair, error) {
-
-	user, err := a.userSvc.FindUserByEmail(ctx, req.Email)
+	authCtx, err := a.userSvc.GetAuthContextByEmail(ctx, req.Email)
 	if err != nil {
-		return nil, nil, apperrors.ErrUnauthorized
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, apperrors.ErrUnauthorized
+		}
+		return nil, nil, fmt.Errorf("auth check failed: %w", err)
 	}
 
+	user := &authCtx.User
 	if !user.PasswordHash.Valid {
 		return nil, nil, apperrors.ErrUnauthorized
 	}
 
 	err = helpers.ComparePassword(user.PasswordHash.String, req.Password)
-
 	if err != nil {
 		return nil, nil, apperrors.ErrUnauthorized
 	}
 
-	member, err := a.workspaceSvc.GetWorkspaceMemberByUserID(ctx, user.ID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil, fmt.Errorf("checking membership: %w", err)
-	}
-
 	var workspace *dtos.WorkspaceResponse
-
-	var role string
-
-	if member != nil {
-		wID, _ := utils.StringToUUID(member.WorkspaceID)
-		workspace, err = a.workspaceSvc.GetByID(ctx, wID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch workspace: %w", err)
+	if authCtx.WorkspaceID.Valid {
+		workspace = &dtos.WorkspaceResponse{
+			ID:   utils.UUIDToString(authCtx.WorkspaceID),
+			Name: authCtx.WorkspaceName.String,
+			Slug: authCtx.WorkspaceSlug.String,
 		}
-		role = member.Role
 	}
 
-	return a.buildAuthResult(ctx, user, workspace, workspace != nil, role)
-
+	return a.buildAuthResult(ctx, user, workspace, workspace != nil, authCtx.Role.String)
 }
 
 func (a *authService) Logout(ctx context.Context, userID pgtype.UUID, refreshToken string) error {

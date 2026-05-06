@@ -11,6 +11,63 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getContactWithPreference = `-- name: GetContactWithPreference :one
+SELECT u.id, u.workspace_id, u.environment_id, u.external_user_id, u.channel, u.contact_value, u.metadata, u.verified, u.created_at, u.updated_at,p.id, p.workspace_id, p.environment_id, p.subscriber_id, p.channel, p.event_type, p.is_enabled, p.created_at, p.updated_at from user_info as u LEFT JOIN
+user_preferences as p on 
+u.id=p.subscriber_id AND
+p.event_type=$4 and p.channel=$5
+WHERE u.external_user_id=$1
+AND u.workspace_id=$2 
+AND u.environment_id=$3
+AND u.channel=$5
+`
+
+type GetContactWithPreferenceParams struct {
+	ExternalUserID string      `db:"external_user_id" json:"external_user_id"`
+	WorkspaceID    pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	EnvironmentID  pgtype.UUID `db:"environment_id" json:"environment_id"`
+	EventType      pgtype.Text `db:"event_type" json:"event_type"`
+	Channel        string      `db:"channel" json:"channel"`
+}
+
+type GetContactWithPreferenceRow struct {
+	UserInfo       UserInfo       `db:"user_info" json:"user_info"`
+	UserPreference UserPreference `db:"user_preference" json:"user_preference"`
+}
+
+func (q *Queries) GetContactWithPreference(ctx context.Context, arg GetContactWithPreferenceParams) (GetContactWithPreferenceRow, error) {
+	row := q.db.QueryRow(ctx, getContactWithPreference,
+		arg.ExternalUserID,
+		arg.WorkspaceID,
+		arg.EnvironmentID,
+		arg.EventType,
+		arg.Channel,
+	)
+	var i GetContactWithPreferenceRow
+	err := row.Scan(
+		&i.UserInfo.ID,
+		&i.UserInfo.WorkspaceID,
+		&i.UserInfo.EnvironmentID,
+		&i.UserInfo.ExternalUserID,
+		&i.UserInfo.Channel,
+		&i.UserInfo.ContactValue,
+		&i.UserInfo.Metadata,
+		&i.UserInfo.Verified,
+		&i.UserInfo.CreatedAt,
+		&i.UserInfo.UpdatedAt,
+		&i.UserPreference.ID,
+		&i.UserPreference.WorkspaceID,
+		&i.UserPreference.EnvironmentID,
+		&i.UserPreference.SubscriberID,
+		&i.UserPreference.Channel,
+		&i.UserPreference.EventType,
+		&i.UserPreference.IsEnabled,
+		&i.UserPreference.CreatedAt,
+		&i.UserPreference.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPreferencesBySubscriberAndChannel = `-- name: GetPreferencesBySubscriberAndChannel :many
 SELECT id, workspace_id, environment_id, subscriber_id, channel, event_type, is_enabled, created_at, updated_at FROM user_preferences
 WHERE subscriber_id = $1

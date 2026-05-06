@@ -12,7 +12,8 @@ import (
 )
 
 const countTemplates = `-- name: CountTemplates :one
-SELECT COUNT(*) FROM templates
+SELECT COUNT(*)
+FROM templates
 WHERE workspace_id = $1
 `
 
@@ -32,9 +33,8 @@ INSERT INTO templates (
     name,
     description,
     event_type
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-)
+  )
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
 `
 
@@ -77,7 +77,8 @@ func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) 
 
 const deleteTemplate = `-- name: DeleteTemplate :exec
 DELETE FROM templates
-WHERE id = $1 AND workspace_id = $2
+WHERE id = $1
+  AND workspace_id = $2
 `
 
 type DeleteTemplateParams struct {
@@ -91,8 +92,9 @@ func (q *Queries) DeleteTemplate(ctx context.Context, arg DeleteTemplateParams) 
 }
 
 const getTemplateByEventAndChannel = `-- name: GetTemplateByEventAndChannel :one
-SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at FROM templates 
-WHERE event_type = $1 
+SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
+FROM templates
+WHERE event_type = $1
   AND workspace_id = $2
   AND environment_id = $3
   AND status = 'live'
@@ -125,9 +127,10 @@ func (q *Queries) GetTemplateByEventAndChannel(ctx context.Context, arg GetTempl
 }
 
 const getTemplateByEventType = `-- name: GetTemplateByEventType :one
-SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at FROM templates 
-WHERE event_type = $1 
-  AND workspace_id = $2 
+SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
+FROM templates
+WHERE event_type = $1
+  AND workspace_id = $2
   AND environment_id = $3
 LIMIT 1
 `
@@ -158,8 +161,10 @@ func (q *Queries) GetTemplateByEventType(ctx context.Context, arg GetTemplateByE
 }
 
 const getTemplateByID = `-- name: GetTemplateByID :one
-SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at FROM templates
-WHERE id = $1 AND workspace_id = $2
+SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
+FROM templates
+WHERE id = $1
+  AND workspace_id = $2
 LIMIT 1
 `
 
@@ -187,9 +192,59 @@ func (q *Queries) GetTemplateByID(ctx context.Context, arg GetTemplateByIDParams
 	return i, err
 }
 
+const getTemplateWithChannel = `-- name: GetTemplateWithChannel :one
+SELECT t.id, t.workspace_id, t.environment_id, t.layout_id, t.created_by, t.name, t.description, t.event_type, t.status, t.created_at, t.updated_at,
+  tc.id, tc.template_id, tc.channel_config_id, tc.channel, tc.content, tc.is_active, tc.created_at, tc.updated_at
+FROM templates t
+  JOIN template_channels tc ON t.id = tc.template_id
+WHERE t.id = $1
+  AND t.workspace_id = $2
+  AND tc.channel = $3
+`
+
+type GetTemplateWithChannelParams struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Channel     string      `db:"channel" json:"channel"`
+}
+
+type GetTemplateWithChannelRow struct {
+	Template        Template        `db:"template" json:"template"`
+	TemplateChannel TemplateChannel `db:"template_channel" json:"template_channel"`
+}
+
+func (q *Queries) GetTemplateWithChannel(ctx context.Context, arg GetTemplateWithChannelParams) (GetTemplateWithChannelRow, error) {
+	row := q.db.QueryRow(ctx, getTemplateWithChannel, arg.ID, arg.WorkspaceID, arg.Channel)
+	var i GetTemplateWithChannelRow
+	err := row.Scan(
+		&i.Template.ID,
+		&i.Template.WorkspaceID,
+		&i.Template.EnvironmentID,
+		&i.Template.LayoutID,
+		&i.Template.CreatedBy,
+		&i.Template.Name,
+		&i.Template.Description,
+		&i.Template.EventType,
+		&i.Template.Status,
+		&i.Template.CreatedAt,
+		&i.Template.UpdatedAt,
+		&i.TemplateChannel.ID,
+		&i.TemplateChannel.TemplateID,
+		&i.TemplateChannel.ChannelConfigID,
+		&i.TemplateChannel.Channel,
+		&i.TemplateChannel.Content,
+		&i.TemplateChannel.IsActive,
+		&i.TemplateChannel.CreatedAt,
+		&i.TemplateChannel.UpdatedAt,
+	)
+	return i, err
+}
+
 const listTemplates = `-- name: ListTemplates :many
-SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at FROM templates
-WHERE workspace_id = $1 AND environment_id = $2
+SELECT id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
+FROM templates
+WHERE workspace_id = $1
+  AND environment_id = $2
 ORDER BY created_at DESC
 `
 
@@ -232,13 +287,13 @@ func (q *Queries) ListTemplates(ctx context.Context, arg ListTemplatesParams) ([
 
 const updateTemplate = `-- name: UpdateTemplate :one
 UPDATE templates
-SET
-    name = $3,
-    description = $4,
-    status = $5,
-    layout_id = $6,
-    updated_at = NOW()
-WHERE id = $1 AND workspace_id = $2
+SET name = $3,
+  description = $4,
+  status = $5,
+  layout_id = $6,
+  updated_at = NOW()
+WHERE id = $1
+  AND workspace_id = $2
 RETURNING id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at
 `
 

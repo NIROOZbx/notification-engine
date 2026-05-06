@@ -72,7 +72,7 @@ type KafkaConfig struct {
 	GroupID string `mapstructure:"group_id"`
 }
 type GRPCConfig struct {
-	GRPCPort string `mapstructure:"grpc_port"`
+	GRPCAddr string `mapstructure:"grpc_addr"`
 }
 
 type CORSConfig struct {
@@ -128,6 +128,7 @@ func LoadConfig() (*Config, error) {
 	v.BindEnv("kafka.group_id", "KAFKA_GROUP_ID")
 
 	v.BindEnv("secret_key", "CREDENTIALS_SECRET")
+	v.BindEnv("grpc.grpc_addr", "BILLING_GRPC_ADDR")
 
 	var cfg Config
 
@@ -166,6 +167,7 @@ func validate(cfg *Config) {
 		{cfg.OAuth.RedirectURL, "REDIRECT_URL"},
 		{cfg.Kafka.Broker, "KAFKA_BROKER"},
 		{cfg.SecretKey, "CREDENTIALS_SECRET"},
+		{cfg.GRPC.GRPCAddr, "BILLING_GRPC_ADDR"},
 	}
 
 	for _, rule := range rules {

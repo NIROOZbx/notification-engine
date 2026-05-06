@@ -255,18 +255,6 @@ func (r *templateRepository) UpdateChannel(ctx context.Context, params domain.Up
 	}
 
 	if params.ChannelConfigID != nil && params.ChannelConfigID.Valid {
-		config, err := r.queries.GetChannelConfigByIDAndWorkspace(ctx, sqlc.GetChannelConfigByIDAndWorkspaceParams{
-			ID:          *params.ChannelConfigID,
-			WorkspaceID: params.WorkspaceID,
-		})
-		if err != nil {
-			return nil, apperrors.ErrForbidden
-		}
-
-		if config.Channel != current.Channel {
-			return nil, fmt.Errorf("%w: channel config type mismatch", apperrors.ErrInvalidInput)
-		}
-
 		updateParams.ChannelConfigID = *params.ChannelConfigID
 	}
 

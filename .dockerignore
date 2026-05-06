@@ -3,3 +3,5 @@ k6/
 docs/
 .git/
 build/
+logs/
+AGENTS.md

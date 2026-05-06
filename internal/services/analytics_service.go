@@ -7,8 +7,8 @@ import (
 
 	"github.com/NIROOZbx/notification-engine/internal/domain"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
+	"github.com/NIROOZbx/notification-engine/pkg/parallel"
 	"github.com/rs/zerolog"
-	"golang.org/x/sync/errgroup"
 )
 
 type AnalyticsService interface {
@@ -42,46 +42,25 @@ func (s *analyticsService) GetFullAnalytics(ctx context.Context, workspaceID str
 	prevStart := start.Add(-duration)
 	prevEnd := start
 
-	var (
-		currentMetrics  *domain.AggregateMetrics
-		previousMetrics *domain.AggregateMetrics
-		timeSeries      []domain.TimeSeriesData
-		providerHealth  []domain.ProviderHealth
-		latencyTrend    []int32
+	currentMetrics, previousMetrics, latencyTrend, providerHealth, timeSeries, err := parallel.Query5(ctx,
+		func(c context.Context) (*domain.AggregateMetrics, error) {
+			return s.repo.GetAggregateMetrics(c, workspaceID, start, end)
+		},
+		func(c context.Context) (*domain.AggregateMetrics, error) {
+			return s.repo.GetAggregateMetrics(c, workspaceID, prevStart, prevEnd)
+		},
+		func(c context.Context) ([]int32, error) {
+			return s.repo.GetLatencyTrend(c, workspaceID)
+		},
+		func(c context.Context) ([]domain.ProviderHealth, error) {
+			return s.repo.GetProviderHealth(c, workspaceID)
+		},
+		func(c context.Context) ([]domain.TimeSeriesData, error) {
+			return s.repo.GetTimeSeriesData(c, workspaceID, start, end, groupBy)
+		},
 	)
 
-	g, gctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		var err error
-		currentMetrics, err = s.repo.GetAggregateMetrics(gctx, workspaceID, start, end)
-		return err
-	})
-
-	g.Go(func() error {
-		var err error
-		previousMetrics, err = s.repo.GetAggregateMetrics(gctx, workspaceID, prevStart, prevEnd)
-		return err
-	})
-	g.Go(func() error {
-		var err error
-		latencyTrend, err = s.repo.GetLatencyTrend(gctx, workspaceID)
-		return err
-	})
-	g.Go(func() error {
-		var err error
-
-		providerHealth, err = s.repo.GetProviderHealth(gctx, workspaceID)
-		return err
-	})
-	g.Go(func() error {
-		var err error
-
-		timeSeries, err = s.repo.GetTimeSeriesData(gctx, workspaceID, start, end, groupBy)
-		return err
-	})
-
-	if err := g.Wait(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	return s.buildResponse(buildResponseParams{
@@ -179,25 +158,17 @@ func (s *analyticsService) GetActivityLogs(ctx context.Context, workspaceID stri
 		pageSize = 20
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
+	offset := (page - 1) * pageSize
+	logs, totalCount, err := parallel.Query2(ctx,
+		func(c context.Context) ([]domain.ActivityLog, error) {
+			return s.repo.ListActivityLogs(c, workspaceID, channel, status, pageSize, offset)
+		},
+		func(c context.Context) (int64, error) {
+			return s.repo.CountActivityLogs(c, workspaceID, channel, status)
+		},
+	)
 
-	var logs []domain.ActivityLog
-	var totalCount int64
-
-	g.Go(func() error {
-		var err error
-		offset := (page - 1) * pageSize
-		logs, err = s.repo.ListActivityLogs(gctx, workspaceID, channel, status, pageSize, offset)
-		return err
-	})
-
-	g.Go(func() error {
-		var err error
-		totalCount, err = s.repo.CountActivityLogs(gctx, workspaceID, channel, status)
-		return err
-	})
-
-	if err := g.Wait(); err != nil {
+	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to fetch activity logs")
 		return nil, err
 	}

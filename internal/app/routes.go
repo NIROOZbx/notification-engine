@@ -3,14 +3,13 @@ package app
 import (
 	"github.com/NIROOZbx/notification-engine/config"
 	"github.com/NIROOZbx/notification-engine/internal/middleware"
-	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
 func SetUpRoutes(r *RouterDeps, corsCfg *config.CORSConfig) {
 	r.App.Use(middleware.NewCORSMiddleware(corsCfg))
 	r.App.Use(recover.New())
-	r.App.Use(logger.New())
+	r.App.Use(middleware.NewTimeLoggerMiddleware(r.Logger))
 
 	api := r.App.Group("/api/v1")
 

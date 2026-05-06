@@ -128,6 +128,51 @@ func (q *Queries) FindUserByProviderID(ctx context.Context, arg FindUserByProvid
 	return i, err
 }
 
+const getAuthContextByEmail = `-- name: GetAuthContextByEmail :one
+SELECT u.id, u.email, u.password_hash, u.full_name, u.auth_provider, u.provider_id, u.avatar_url, u.is_verified, u.is_active, u.last_login_at, u.created_at, u.updated_at,
+    m.role,
+    w.id AS workspace_id,
+    w.name AS workspace_name,
+    w.slug AS workspace_slug
+FROM users as u
+LEFT JOIN workspace_members m ON u.id = m.user_id
+LEFT JOIN workspaces w ON m.workspace_id = w.id
+WHERE u.email = $1 
+LIMIT 1
+`
+
+type GetAuthContextByEmailRow struct {
+	User          User        `db:"user" json:"user"`
+	Role          pgtype.Text `db:"role" json:"role"`
+	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	WorkspaceName pgtype.Text `db:"workspace_name" json:"workspace_name"`
+	WorkspaceSlug pgtype.Text `db:"workspace_slug" json:"workspace_slug"`
+}
+
+func (q *Queries) GetAuthContextByEmail(ctx context.Context, email string) (GetAuthContextByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getAuthContextByEmail, email)
+	var i GetAuthContextByEmailRow
+	err := row.Scan(
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.PasswordHash,
+		&i.User.FullName,
+		&i.User.AuthProvider,
+		&i.User.ProviderID,
+		&i.User.AvatarUrl,
+		&i.User.IsVerified,
+		&i.User.IsActive,
+		&i.User.LastLoginAt,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.Role,
+		&i.WorkspaceID,
+		&i.WorkspaceName,
+		&i.WorkspaceSlug,
+	)
+	return i, err
+}
+
 const getUserAuthContext = `-- name: GetUserAuthContext :one
 SELECT 
     u.id, 
@@ -165,8 +210,7 @@ SELECT
 FROM users u
 LEFT JOIN workspace_members m ON u.id = m.user_id
 LEFT JOIN workspaces w ON m.workspace_id = w.id
-WHERE u.id = $1 
-LIMIT 1
+WHERE u.id = $1
 `
 
 type GetUserWithWorkspaceRow struct {
