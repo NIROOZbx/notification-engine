@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/NIROOZbx/notification-engine/consts"
@@ -90,7 +91,10 @@ func (e *Engine) ingestSystem(ctx context.Context, workspaceID, envID string, pa
 		return nil
 	}
 
+	var wg sync.WaitGroup
 	for _, contact := range owners {
+		wg.Add(1)
+
 		ownerPayload := *payload
 		ownerPayload.IdempotencyKey = fmt.Sprintf("%s:%s", payload.IdempotencyKey, contact.ContactValue)
 		ic := &ingestContext{
@@ -99,14 +103,17 @@ func (e *Engine) ingestSystem(ctx context.Context, workspaceID, envID string, pa
 			payload:     &ownerPayload,
 			strategy:    &systemStrategy{recipientEmail: contact.ContactValue},
 		}
-		if err := e.ingestNormal(ctx, ic); err != nil {
-			e.log.Error().Err(err).Str("owner", contact.ContactValue).Msg("system ingest failed")
-			continue
-		}
+
+		go func(ctx context.Context, ic *ingestContext, ownerEmail string) {
+			defer wg.Done()
+			if err := e.ingestNormal(ctx, ic); err != nil {
+				e.log.Error().Err(err).Str("owner", ownerEmail).Msg("system ingest failed")
+			}
+		}(ctx, ic, contact.ContactValue)
 	}
 
+	wg.Wait()
 	return nil
-
 }
 
 func (e *Engine) ingestNormal(ctx context.Context, ic *ingestContext) error {
@@ -122,13 +129,20 @@ func (e *Engine) ingestNormal(ctx context.Context, ic *ingestContext) error {
 		return err
 	}
 
+	var wg sync.WaitGroup
+
 	for _, ch := range channels {
-		ic.ch = &ch
-		if err := e.ingestChannel(ctx, ic); err != nil {
-			e.log.Error().Err(err).Str("channel", ch.Channel).Msg("channel ingest failed")
-			continue
-		}
+		wg.Add(1)
+		channelIC:=*ic
+		channelIC.ch=&ch
+		go func(icCopy ingestContext) {
+			defer wg.Done()
+			if err := e.ingestChannel(ctx, &icCopy); err != nil {
+				e.log.Error().Err(err).Str("channel", icCopy.ch.Channel).Msg("channel ingest failed")
+			}
+		}(channelIC)
 	}
+	wg.Wait()
 	return nil
 
 }
