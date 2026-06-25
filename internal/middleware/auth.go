@@ -221,9 +221,7 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("failed to store new refresh token")
 
 	}
-	isProd := a.cfg.Environment == "production"
-
-	jwt.SetTokenCookies(c, pair, a.cfg.AccessExpiryMinutes, a.cfg.RefreshExpiryHours, isProd)
+	jwt.SetTokenCookies(c, pair, a.cfg.ToJWTConfig())
 
 	a.log.Info().
 		Str("userID", refreshClaims.UserID).

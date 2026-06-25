@@ -261,6 +261,9 @@ func (w *workspaceService) GetMemberRole(ctx context.Context, workspaceID, userI
 }
 
 func (w *workspaceService) UpdateMemberRole(ctx context.Context, params UpdateMemberRoleParams) (*dtos.WorkspaceMemberResponse, error) {
+	if params.Role == "owner" {
+		return nil, apperrors.ErrForbidden
+	}
 	roleToAssign := strings.ToLower(params.Role)
 	if roleToAssign != "admin" && roleToAssign != "member" {
 		return nil, fmt.Errorf("invalid role: %w", apperrors.ErrBadRequest)
