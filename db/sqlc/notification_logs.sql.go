@@ -350,8 +350,7 @@ SET delivery_status = $2,
         WHEN $2 IN ('failed', 'bounced') THEN $3
         ELSE NULL
     END,
-    provider_response = $4,
-    updated_at = NOW()
+    provider_response = $4
 WHERE provider_message_id = $1
 `
 
@@ -379,8 +378,7 @@ SET status = $2,
     attempt_count = $4,
     sent_at = $5,
     next_retry_at = $6,
-    error_message = $7,
-    updated_at = NOW()
+    error_message = $7
 WHERE id = $1
 RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
 `
@@ -439,8 +437,7 @@ func (q *Queries) UpdateNotificationLog(ctx context.Context, arg UpdateNotificat
 
 const updateNotificationStatus = `-- name: UpdateNotificationStatus :one
 UPDATE notification_logs
-SET status = $2,
-    updated_at = NOW()
+SET status = $2
 WHERE id = $1
 RETURNING id, workspace_id, environment_id, template_id, external_user_id, event_type, channel, status, rendered_content, idempotency_key, attempt_count, is_test, queued_at, recipient, sent_at, created_at, scheduled_at, next_retry_at, error_message, trigger_data, updated_at, delivery_status, delivered_at, failed_at, provider_message_id, provider_response
 `
@@ -488,8 +485,7 @@ const updateProviderMessageID = `-- name: UpdateProviderMessageID :exec
 UPDATE notification_logs
 SET provider_message_id = $2,
     status = 'sent',
-    delivery_status = 'sent',
-    updated_at = NOW()
+    delivery_status = 'sent'
 WHERE id = $1
 `
 

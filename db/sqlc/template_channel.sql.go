@@ -213,8 +213,7 @@ const updateTemplateChannel = `-- name: UpdateTemplateChannel :one
 UPDATE template_channels
 SET channel_config_id = $2,
     content = $3,
-    is_active = $4,
-    updated_at = NOW()
+    is_active = $4
 WHERE id = $1
 RETURNING id, template_id, channel_config_id, channel, content, is_active, created_at, updated_at
 `

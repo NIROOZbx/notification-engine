@@ -34,24 +34,21 @@ ORDER BY channel,
 UPDATE channel_configs
 SET display_name = COALESCE(sqlc.narg('display_name'), display_name),
     credentials = COALESCE(sqlc.narg('credentials'), credentials),
-    is_active = COALESCE(sqlc.narg('is_active'), is_active),
-    updated_at = NOW()
+    is_active = COALESCE(sqlc.narg('is_active'), is_active)
 WHERE id = $1
     AND workspace_id = $2
     AND deleted_at IS NULL
 RETURNING *;
 -- name: SetChannelConfigDefault :exec
 UPDATE channel_configs
-SET is_default = true,
-    updated_at = NOW()
+SET is_default = true
 WHERE id = $1
     AND workspace_id = $2
     AND deleted_at IS NULL;
 
 -- name: UnsetChannelConfigDefault :exec
 UPDATE channel_configs
-SET is_default = false,
-    updated_at = NOW()
+SET is_default = false
 WHERE workspace_id = $1
     AND channel = $2
     AND deleted_at IS NULL;

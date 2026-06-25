@@ -14,9 +14,9 @@ FROM alpine:3.23
 
 WORKDIR /app
 
-RUN adduser -D nirooz
+RUN adduser -D -u 1001 nirooz
 
-USER nirooz
+USER 1001
 
 COPY --from=builder /app/backend .
 

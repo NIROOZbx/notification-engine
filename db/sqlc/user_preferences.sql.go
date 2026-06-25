@@ -12,14 +12,16 @@ import (
 )
 
 const getContactWithPreference = `-- name: GetContactWithPreference :one
-SELECT u.id, u.workspace_id, u.environment_id, u.external_user_id, u.channel, u.contact_value, u.metadata, u.verified, u.created_at, u.updated_at,p.id, p.workspace_id, p.environment_id, p.subscriber_id, p.channel, p.event_type, p.is_enabled, p.created_at, p.updated_at from user_info as u LEFT JOIN
-user_preferences as p on 
-u.id=p.subscriber_id AND
-p.event_type=$4 and p.channel=$5
-WHERE u.external_user_id=$1
-AND u.workspace_id=$2 
-AND u.environment_id=$3
-AND u.channel=$5
+SELECT u.id, u.workspace_id, u.environment_id, u.external_user_id, u.channel, u.contact_value, u.metadata, u.verified, u.created_at, u.updated_at,
+  p.id, p.workspace_id, p.environment_id, p.subscriber_id, p.channel, p.event_type, p.is_enabled, p.created_at, p.updated_at
+from user_info as u
+  LEFT JOIN user_preferences as p on u.id = p.subscriber_id
+  AND p.event_type = $4
+  and p.channel = $5
+WHERE u.external_user_id = $1
+  AND u.workspace_id = $2
+  AND u.environment_id = $3
+  AND u.channel = $5
 `
 
 type GetContactWithPreferenceParams struct {
@@ -27,7 +29,7 @@ type GetContactWithPreferenceParams struct {
 	WorkspaceID    pgtype.UUID `db:"workspace_id" json:"workspace_id"`
 	EnvironmentID  pgtype.UUID `db:"environment_id" json:"environment_id"`
 	EventType      pgtype.Text `db:"event_type" json:"event_type"`
-	Channel        string      `db:"channel" json:"channel"`
+	Channel        pgtype.Text `db:"channel" json:"channel"`
 }
 
 type GetContactWithPreferenceRow struct {
@@ -69,15 +71,19 @@ func (q *Queries) GetContactWithPreference(ctx context.Context, arg GetContactWi
 }
 
 const getPreferencesBySubscriberAndChannel = `-- name: GetPreferencesBySubscriberAndChannel :many
-SELECT id, workspace_id, environment_id, subscriber_id, channel, event_type, is_enabled, created_at, updated_at FROM user_preferences
+SELECT id, workspace_id, environment_id, subscriber_id, channel, event_type, is_enabled, created_at, updated_at
+FROM user_preferences
 WHERE subscriber_id = $1
-  AND channel       = $2
-  AND (event_type IS NULL OR event_type = $3)
+  AND channel = $2
+  AND (
+    event_type IS NULL
+    OR event_type = $3
+  )
 `
 
 type GetPreferencesBySubscriberAndChannelParams struct {
 	SubscriberID pgtype.UUID `db:"subscriber_id" json:"subscriber_id"`
-	Channel      string      `db:"channel" json:"channel"`
+	Channel      pgtype.Text `db:"channel" json:"channel"`
 	EventType    pgtype.Text `db:"event_type" json:"event_type"`
 }
 
@@ -112,10 +118,11 @@ func (q *Queries) GetPreferencesBySubscriberAndChannel(ctx context.Context, arg 
 }
 
 const listUserPreferencesBySubscriber = `-- name: ListUserPreferencesBySubscriber :many
-SELECT up.id, up.workspace_id, up.environment_id, up.subscriber_id, up.channel, up.event_type, up.is_enabled, up.created_at, up.updated_at FROM user_preferences up
-JOIN user_info ui ON up.subscriber_id = ui.id
-WHERE ui.workspace_id = $1 
-  AND ui.environment_id = $2 
+SELECT up.id, up.workspace_id, up.environment_id, up.subscriber_id, up.channel, up.event_type, up.is_enabled, up.created_at, up.updated_at
+FROM user_preferences up
+  JOIN user_info ui ON up.subscriber_id = ui.id
+WHERE ui.workspace_id = $1
+  AND ui.environment_id = $2
   AND ui.external_user_id = $3
 `
 
@@ -163,12 +170,10 @@ INSERT INTO user_preferences (
     channel,
     event_type,
     is_enabled
-) VALUES (
-    $1, $2, $3, $4, $5, $6
-)
-ON CONFLICT (subscriber_id, channel, event_type)
-DO UPDATE SET
-    is_enabled = EXCLUDED.is_enabled
+  )
+VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (subscriber_id, channel, event_type) DO
+UPDATE
+SET is_enabled = EXCLUDED.is_enabled
 RETURNING id, workspace_id, environment_id, subscriber_id, channel, event_type, is_enabled, created_at, updated_at
 `
 
@@ -176,9 +181,9 @@ type UpsertUserPreferenceParams struct {
 	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
 	EnvironmentID pgtype.UUID `db:"environment_id" json:"environment_id"`
 	SubscriberID  pgtype.UUID `db:"subscriber_id" json:"subscriber_id"`
-	Channel       string      `db:"channel" json:"channel"`
+	Channel       pgtype.Text `db:"channel" json:"channel"`
 	EventType     pgtype.Text `db:"event_type" json:"event_type"`
-	IsEnabled     bool        `db:"is_enabled" json:"is_enabled"`
+	IsEnabled     pgtype.Bool `db:"is_enabled" json:"is_enabled"`
 }
 
 func (q *Queries) UpsertUserPreference(ctx context.Context, arg UpsertUserPreferenceParams) (UserPreference, error) {

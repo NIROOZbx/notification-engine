@@ -13,6 +13,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/pkg/apperrors"
 	"github.com/NIROOZbx/notification-engine/pkg/parallel"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 )
 
 type CreateAPIKeyParams struct {
@@ -55,11 +56,13 @@ type APIKeyService interface {
 
 type apiKeyService struct {
 	repo repositories.APIKeyRepository
+	log  zerolog.Logger
 }
 
-func NewAPIKeyService(repo repositories.APIKeyRepository) APIKeyService {
+func NewAPIKeyService(repo repositories.APIKeyRepository, log zerolog.Logger) APIKeyService {
 	return &apiKeyService{
 		repo: repo,
+		log:  log,
 	}
 }
 
@@ -178,8 +181,14 @@ func (a *apiKeyService) ValidateAPIKey(ctx context.Context, rawKey string) (*Val
 
 	validatedKey, err := a.repo.ValidateAndTouch(ctx, hashedKey)
 	if err != nil {
+		a.log.Warn().Err(err).Msg("api key validation failed")
 		return nil, apperrors.ErrUnauthorized
 	}
+
+	a.log.Info().
+		Str("key_id", utils.UUIDToString(validatedKey.ID)).
+		Msg("api key validated successfully")
+
 	isTest := strings.HasPrefix(rawKey, "ne_test_")
 	return &ValidatedKey{
 		ID:          validatedKey.ID,

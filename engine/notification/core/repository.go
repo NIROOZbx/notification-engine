@@ -4,8 +4,6 @@ import (
 	"context"
 )
 
-
-
 type Repository interface {
 	GetTemplateByEventType(ctx context.Context, workspaceID, envID, eventType string) (*Template, error)
 	GetContactByExternalUserAndChannel(ctx context.Context, workspaceID, envID, externalUserID, channel string) (*Contact, error)

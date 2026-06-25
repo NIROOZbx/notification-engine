@@ -139,9 +139,9 @@ func mapToUserPreference(row sqlc.UserPreference) *domain.UserPreference {
 	return &domain.UserPreference{
 		ID:           utils.UUIDToString(row.ID),
 		SubscriberID: utils.UUIDToString(row.SubscriberID),
-		Channel:      row.Channel,
+		Channel:      row.Channel.String,
 		EventType:    row.EventType.String,
-		IsEnabled:    row.IsEnabled,
+		IsEnabled:    row.IsEnabled.Bool,
 		CreatedAt:    helpers.ToTime(row.CreatedAt),
 		UpdatedAt:    helpers.ToTime(row.UpdatedAt),
 	}

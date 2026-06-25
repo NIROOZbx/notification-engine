@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
@@ -10,6 +11,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/internal/utils/helpers"
 	"github.com/NIROOZbx/notification-engine/pkg/conversion"
+	"github.com/jackc/pgx/v5"
 )
 
 type notificationRepository struct {
@@ -63,6 +65,9 @@ func (r *notificationRepository) GetNotificationLogByID(ctx context.Context, id 
 func (r *notificationRepository) GetNotificationLogByIdempotencyKey(ctx context.Context, key string) (*core.NotificationLog, error) {
 	row, err := r.queries.GetNotificationLogByIdempotencyKey(ctx, key)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to get notification log by idempotency key: %w", err)
 	}
 	return MapToCoreLog(row), nil
@@ -223,25 +228,28 @@ func (r *notificationRepository) GetContactWithPreference(ctx context.Context, p
 		ExternalUserID: params.ExternalUserID,
 		WorkspaceID:    utils.MustStringToUUID(params.WorkspaceID),
 		EnvironmentID:  utils.MustStringToUUID(params.EnvironmentID),
-		Channel:        params.Channel,
+		Channel:        helpers.Text(params.Channel),
 		EventType:      helpers.Text(params.EventType),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get contact with preference: %w", err)
 	}
+	
+
 
 	contact := &core.Contact{
 		ID:           utils.UUIDToString(row.UserInfo.ID),
 		ContactValue: row.UserInfo.ContactValue,
 		Channel:      row.UserInfo.Channel,
 	}
+	fmt.Println("Got contact",contact)
 
 	var preference *core.Preference
 	if row.UserPreference.ID.Valid {
 		preference = &core.Preference{
-			Channel:   row.UserPreference.Channel,
+			Channel:   row.UserPreference.Channel.String,
 			EventType: row.UserPreference.EventType.String,
-			IsEnabled: row.UserPreference.IsEnabled,
+			IsEnabled: row.UserPreference.IsEnabled.Bool,
 		}
 	}
 
@@ -276,19 +284,20 @@ func (r *notificationRepository) GetProductionEnvironmentID(ctx context.Context,
 func (r *notificationRepository) GetPreferencesBySubscriberAndChannel(ctx context.Context, subscriberID, channel, eventType string) ([]core.Preference, error) {
 	rows, err := r.queries.GetPreferencesBySubscriberAndChannel(ctx, sqlc.GetPreferencesBySubscriberAndChannelParams{
 		SubscriberID: utils.MustStringToUUID(subscriberID),
-		Channel:      channel,
+		Channel:      helpers.Text(channel),
 		EventType:    helpers.Text(eventType),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get preferences: %w", err)
 	}
 
+
 	result := make([]core.Preference, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, core.Preference{
-			Channel:   row.Channel,
+			Channel:   row.Channel.String,
 			EventType: row.EventType.String,
-			IsEnabled: row.IsEnabled,
+			IsEnabled: row.IsEnabled.Bool,
 		})
 	}
 	return result, nil

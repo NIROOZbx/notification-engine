@@ -65,6 +65,13 @@ type AuthConfig struct {
 	RefreshTokenSecret  string `mapstructure:"refresh_token_secret"`
 	Environment         string `mapstructure:"environment"`
 	FrontendURL         string `mapstructure:"frontend_url"`
+	SystemWorkspaceID   string `mapstructure:"system_workspace_id"`
+	SystemEnvID         string `mapstructure:"system_env_id"`
+	SystemEmailAPIKey   string `mapstructure:"system_email_api_key"`
+	SystemFromEmail     string `mapstructure:"system_from_email"`
+	SystemEmailProvider string `mapstructure:"system_email_provider"`
+	CookieSameSite      string `mapstructure:"cookie_samesite"`
+	CookieSecure        bool   `mapstructure:"cookie_secure"`
 }
 
 type KafkaConfig struct {
@@ -78,7 +85,6 @@ type GRPCConfig struct {
 type CORSConfig struct {
 	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
-
 
 type Config struct {
 	Server    ServerConfig   `mapstructure:"server"`
@@ -95,7 +101,7 @@ type Config struct {
 
 func LoadConfig() (*Config, error) {
 
-	if err := godotenv.Load("../../.env"); err != nil {
+	if err := godotenv.Load(".env"); err != nil {
 		log.Println("no .env file found — reading from environment directly")
 	}
 	v := viper.New()
@@ -109,6 +115,9 @@ func LoadConfig() (*Config, error) {
 
 	v.AutomaticEnv()
 
+	v.SetDefault("auth.cookie_samesite", "Lax")
+	v.SetDefault("auth.cookie_secure", false)
+
 	v.BindEnv("database.user", "DB_USER")
 	v.BindEnv("database.password", "DB_PASSWORD")
 	v.BindEnv("database.host", "DB_HOST")
@@ -116,9 +125,18 @@ func LoadConfig() (*Config, error) {
 	v.BindEnv("database.name", "DB_NAME")
 
 	v.BindEnv("redis.password", "REDIS_PASSWORD")
+	v.BindEnv("redis.addr", "REDIS_ADDR")
 
 	v.BindEnv("auth.refresh_token_secret", "REFRESH_SECRET")
 	v.BindEnv("auth.access_token_secret", "ACCESS_SECRET")
+	v.BindEnv("auth.system_workspace_id", "SYSTEM_WORKSPACE_ID")
+	v.BindEnv("auth.system_env_id", "SYSTEM_ENV_ID")
+	v.BindEnv("auth.system_email_api_key", "SYSTEM_EMAIL_API_KEY")
+	v.BindEnv("auth.system_from_email", "SYSTEM_FROM_EMAIL")
+	v.BindEnv("auth.system_email_provider", "SYSTEM_EMAIL_PROVIDER")
+	v.BindEnv("auth.frontend_url", "FRONTEND_URL")
+	v.BindEnv("auth.cookie_samesite", "COOKIE_SAMESITE")
+	v.BindEnv("auth.cookie_secure", "COOKIE_SECURE")
 
 	v.BindEnv("oauth.client_id", "CLIENT_ID")
 	v.BindEnv("oauth.client_secret", "CLIENT_SECRET")
@@ -136,7 +154,7 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	cfg.Database.DSN = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+	cfg.Database.DSN = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=require",
 		cfg.Database.User,
 		cfg.Database.Password,
 		cfg.Database.Host,
@@ -168,6 +186,11 @@ func validate(cfg *Config) {
 		{cfg.Kafka.Broker, "KAFKA_BROKER"},
 		{cfg.SecretKey, "CREDENTIALS_SECRET"},
 		{cfg.GRPC.GRPCAddr, "BILLING_GRPC_ADDR"},
+		{cfg.Auth.SystemWorkspaceID, "SYSTEM_WORKSPACE_ID"},
+		{cfg.Auth.SystemEnvID, "SYSTEM_ENV_ID"},
+		{cfg.Auth.SystemEmailAPIKey, "SYSTEM_EMAIL_API_KEY"},
+		{cfg.Auth.SystemFromEmail, "SYSTEM_FROM_EMAIL"},
+		{cfg.Auth.SystemEmailProvider, "SYSTEM_EMAIL_PROVIDER"},
 	}
 
 	for _, rule := range rules {
@@ -192,5 +215,7 @@ func (a *AuthConfig) ToJWTConfig() jwt.Config {
 		RefreshTokenSecret:  a.RefreshTokenSecret,
 		AccessExpiryMinutes: a.AccessExpiryMinutes,
 		RefreshExpiryHours:  a.RefreshExpiryHours,
+		CookieSameSite:      a.CookieSameSite,
+		CookieSecure:        a.CookieSecure,
 	}
 }

@@ -7,5 +7,6 @@ type NotificationEvent struct {
 	Channel           string
 	Data map[string]any
 	AttemptNumber     int
-	Recipient string
+	Recipient         string
+	PublishedAt       int64
 }

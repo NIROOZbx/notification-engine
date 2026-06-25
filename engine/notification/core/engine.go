@@ -13,6 +13,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/engine/notification/provider"
 	"github.com/NIROOZbx/notification-engine/engine/notification/queue"
 	"github.com/NIROOZbx/notification-engine/internal/billing"
+	"github.com/NIROOZbx/notification-engine/internal/metrics"
 	"github.com/NIROOZbx/notification-engine/internal/utils"
 	"github.com/NIROOZbx/notification-engine/pkg/encryptor"
 	"github.com/NIROOZbx/notification-engine/pkg/parallel"
@@ -29,6 +30,7 @@ type Engine struct {
 	renderer      Renderer
 	secretKey     string
 	billingClient billing.Client
+	metrics       *metrics.Metrics
 }
 
 type EngineConfig struct {
@@ -38,6 +40,7 @@ type EngineConfig struct {
 	Renderer      Renderer
 	SecretKey     string
 	BillingClient billing.Client
+	Metrics       *metrics.Metrics
 }
 
 func NewEngine(cfg EngineConfig) *Engine {
@@ -49,6 +52,7 @@ func NewEngine(cfg EngineConfig) *Engine {
 		renderer:      cfg.Renderer,
 		secretKey:     cfg.SecretKey,
 		billingClient: cfg.BillingClient,
+		metrics:       cfg.Metrics,
 	}
 }
 
@@ -65,6 +69,10 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 		return err
 	}
 
+	if payload.RecipientEmail != "" {
+		return e.ingestDirect(ctx, workspaceID, envID, payload)
+	}
+
 	if payload.IsSystem {
 		return e.ingestSystem(ctx, workspaceID, envID, payload)
 	}
@@ -76,6 +84,21 @@ func (e *Engine) Ingest(ctx context.Context, workspaceID string, envID string, p
 		strategy:    &normalStrategy{},
 	})
 
+}
+
+func (e *Engine) ingestDirect(ctx context.Context, workspaceID, envID string, payload *models.TriggerPayload) error {
+	resolvedEnvID, err := e.resolveEnvID(ctx, workspaceID, envID)
+	if err != nil {
+		return fmt.Errorf("resolving env for direct send: %w", err)
+	}
+
+	ic := &ingestContext{
+		workspaceID: workspaceID,
+		envID:       resolvedEnvID,
+		payload:     payload,
+		strategy:    &systemStrategy{recipientEmail: payload.RecipientEmail},
+	}
+	return e.ingestNormal(ctx, ic)
 }
 func (e *Engine) ingestSystem(ctx context.Context, workspaceID, envID string, payload *models.TriggerPayload) error {
 	resolvedEnvID, err := e.resolveEnvID(ctx, workspaceID, envID)
@@ -129,14 +152,18 @@ func (e *Engine) ingestNormal(ctx context.Context, ic *ingestContext) error {
 		return err
 	}
 
+	e.log.Debug().Str("workspace id in normal", ic.workspaceID).Msg("")
+
 	var wg sync.WaitGroup
 
 	for _, ch := range channels {
 		wg.Add(1)
-		channelIC:=*ic
-		channelIC.ch=&ch
+		channelIC := *ic
+		channelIC.ch = &ch
 		go func(icCopy ingestContext) {
 			defer wg.Done()
+			e.log.Debug().Str("workspace id in go routine", ic.workspaceID).Msg("")
+
 			if err := e.ingestChannel(ctx, &icCopy); err != nil {
 				e.log.Error().Err(err).Str("channel", icCopy.ch.Channel).Msg("channel ingest failed")
 			}
@@ -195,22 +222,40 @@ func (e *Engine) ingestChannel(ctx context.Context, ic *ingestContext) error {
 	channelKey := fmt.Sprintf("%s:%s", ic.payload.IdempotencyKey, ic.ch.Channel)
 	ic.channelKey = channelKey
 
-	resp, existingLog, cp, err := parallel.Query3(ctx,
+	contact, preference, err := ic.strategy.ResolveContact(ctx, e.repo, ic)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if contact == nil || contact.ContactValue == "" {
+		return fmt.Errorf("failed to resolve contact: subscriber '%s' not found for channel '%s'", ic.payload.ExternalUserID, ic.ch.Channel)
+	}
+
+	ic.contact = contact
+	ic.preference = preference
+	l.Info().Str("recipient", ic.contact.ContactValue).Msg("found recipient contact")
+
+	resp, existingLog, err := parallel.Query2(ctx,
 		func(ctx context.Context) (*billing.CheckLimitResponse, error) {
 			return e.billingClient.CheckLimit(ctx, ic.workspaceID, ic.envID, ic.ch.Channel)
 		},
 		func(ctx context.Context) (*NotificationLog, error) {
 			return e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
 		},
-		func(ctx context.Context) (*ContactPreferencePair, error) {
-			contact, preference, err := ic.strategy.ResolveContact(ctx, e.repo, ic)
-			return &ContactPreferencePair{
-				Contact:    contact,
-				Preference: preference,
-			}, err
-		})
+	)
+	l.Debug().
+		Str("workspace_id", ic.workspaceID).
+		Str("env_id", ic.envID).	
+		Str("external_user_id", ic.payload.ExternalUserID).
+		Str("channel", ic.ch.Channel).
+		Bool("contact_found", ic.contact != nil).
+		Msg("Ingestion checks completed")
 
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if existingLog != nil {
+		l.Info().Msg("duplicate idempotency key, skipping")
+		return nil
+	}
+
+	if err != nil {
 		l.Error().Err(err).Msg("parallel ingestion checks failed")
 		return err
 	}
@@ -224,19 +269,6 @@ func (e *Engine) ingestChannel(ctx context.Context, ic *ingestContext) error {
 			return nil
 		}
 	}
-
-	if existingLog != nil {
-		l.Info().Msg("duplicate idempotency key, skipping")
-		return nil
-	}
-
-	if cp == nil || cp.Contact == nil {
-		return fmt.Errorf("failed to resolve contact")
-	}
-
-	ic.contact = cp.Contact
-	ic.preference = cp.Preference
-	l.Info().Str("recipient", ic.contact.ContactValue).Msg("found recipient contact")
 
 	if !ic.strategy.SkipOptOut() && ic.preference != nil && !ic.preference.IsEnabled {
 		l.Info().Msg("user has opted out of this channel/event")
@@ -287,6 +319,7 @@ func (e *Engine) publishToKafka(ctx context.Context, notifLog *NotificationLog, 
 		Channel:           notifLog.Channel,
 		Data:              ic.payload.Data,
 		Recipient:         ic.contact.ContactValue,
+		PublishedAt:       time.Now().UnixNano(),
 	}
 	topic, err := queue.TopicByChannel(ic.ch.Channel)
 	if err != nil {
@@ -419,6 +452,15 @@ func (e *Engine) Process(ctx context.Context, event *models.NotificationEvent) e
 	if sendErr != nil {
 		attemptStatus = "failed"
 		errMessage = sendErr.Error()
+	}
+
+	if e.metrics != nil {
+		e.metrics.ProviderDuration.WithLabelValues(p.Name(), p.Channel(), attemptStatus).Observe(duration.Seconds())
+		if sendErr == nil {
+			e.metrics.NotificationsSent.WithLabelValues(p.Channel(), p.Name()).Inc()
+		} else {
+			e.metrics.NotificationsFailed.WithLabelValues(p.Channel(), p.Name()).Inc()
+		}
 	}
 
 	err = e.repo.InsertNotificationAttempt(ctx, CreateAttemptParams{
@@ -613,7 +655,7 @@ func validatePayload(payload *models.TriggerPayload, e zerolog.Logger) error {
 	if payload.EventType == "" {
 		return fmt.Errorf("event_type is required")
 	}
-	if payload.IsSystem {
+	if payload.IsSystem || payload.RecipientEmail != "" {
 		return nil
 	}
 	if payload.ExternalUserID == "" {

@@ -1,0 +1,14 @@
+namespace: warpstream
+
+bucketURL: "s3://nirooz-warpstream-data-prod?region=ap-south-1"
+
+secretStore:
+  name: aws-secretsmanager-store
+  region: ap-south-1
+  serviceAccountName: warpstream-agent-sa
+
+externalSecret:
+  name: warpstream-agent-secret
+  refreshInterval: 1h
+  targetSecretName: warpstream-static-runtime-secret
+  awsSecretKey: warpstream/credentials

@@ -3,22 +3,35 @@ package app
 import (
 	"github.com/NIROOZbx/notification-engine/config"
 	"github.com/NIROOZbx/notification-engine/internal/middleware"
+	"github.com/NIROOZbx/notification-engine/pkg/response"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/adaptor"
+	"github.com/gofiber/fiber/v3/middleware/pprof"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
 func SetUpRoutes(r *RouterDeps, corsCfg *config.CORSConfig) {
+	r.App.Use(pprof.New())
 	r.App.Use(middleware.NewCORSMiddleware(corsCfg))
 	r.App.Use(recover.New())
-	r.App.Use(middleware.NewTimeLoggerMiddleware(r.Logger))
-
+	r.App.Use(middleware.NewTimeLoggerMiddleware(r.Logger, r.Metrics))
+	r.App.Get("/health", func(c fiber.Ctx) error {
+		return response.OK(c, "service healthy", nil)
+	})
+	r.App.Get("/metrics", adaptor.HTTPHandler(r.Metrics.HTTPHandler()))
 	api := r.App.Group("/api/v1")
 
 	// public
 	auth := api.Group("/auth")
-	auth.Get("/:provider", r.AuthHandler.OAuthLogin)
-	auth.Get("/:provider/callback", r.AuthHandler.OAuthCallback)
+	// static routes first
 	auth.Post("/register", r.AuthHandler.Register)
 	auth.Post("/login", r.AuthHandler.Login)
+	auth.Get("/verify", r.AuthHandler.VerifyEmail)
+	auth.Post("/resend-verification", r.AuthHandler.ResendEmail)
+
+	// dynamic routes last
+	auth.Get("/:provider", r.AuthHandler.OAuthLogin)
+	auth.Get("/:provider/callback", r.AuthHandler.OAuthCallback)
 	api.Get("/plans", r.PlanHandler.GetAllPlans)
 
 	// onboarding — partial token

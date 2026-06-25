@@ -99,8 +99,8 @@ func (w *workspaceService) fetchExistingWorkspace(ctx context.Context, workspace
 		},
 	)
 
-	if err!=nil{
-		return  nil,err
+	if err != nil {
+		return nil, err
 	}
 	return &WorkspaceWithRole{
 		Workspace: mapToWorkspaceResponseFromRow(existingWorkspace, envs),
@@ -134,8 +134,6 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 			return fmt.Errorf("creating workspace member: %w", err)
 		}
 
-		
-
 		result = &WorkspaceWithRole{
 			Workspace: mapToWorkspaceResponse(workspace, consts.PlanFree, nil),
 			Role:      workspaceMember.Role,
@@ -154,8 +152,6 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 				return fmt.Errorf("creating %s environment: %w", val, err)
 			}
 		}
-		
-		
 
 		return nil
 
@@ -169,7 +165,6 @@ func (w *workspaceService) setupNewWorkspace(ctx context.Context, userID pgtype.
 	if err != nil {
 		return nil, fmt.Errorf("billing subscription failed: %w", err)
 	}
-
 
 	envs, err := w.repo.GetEnvironmentsByWorkspace(ctx, utils.MustStringToUUID(result.Workspace.ID))
 	if err != nil {
@@ -396,7 +391,6 @@ func (w *workspaceService) RemoveMember(ctx context.Context, params RemoveMember
 
 	return nil
 }
-
 
 func mapToWorkspaceResponse(w sqlc.Workspace, planName string, envs []sqlc.Environment) *dtos.WorkspaceResponse {
 	return &dtos.WorkspaceResponse{

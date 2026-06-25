@@ -272,8 +272,7 @@ func (q *Queries) RemoveProviderOverride(ctx context.Context, arg RemoveProvider
 
 const setChannelConfigDefault = `-- name: SetChannelConfigDefault :exec
 UPDATE channel_configs
-SET is_default = true,
-    updated_at = NOW()
+SET is_default = true
 WHERE id = $1
     AND workspace_id = $2
     AND deleted_at IS NULL
@@ -310,8 +309,7 @@ func (q *Queries) SoftDeleteChannelConfig(ctx context.Context, arg SoftDeleteCha
 
 const unsetChannelConfigDefault = `-- name: UnsetChannelConfigDefault :exec
 UPDATE channel_configs
-SET is_default = false,
-    updated_at = NOW()
+SET is_default = false
 WHERE workspace_id = $1
     AND channel = $2
     AND deleted_at IS NULL
@@ -331,8 +329,7 @@ const updateChannelConfig = `-- name: UpdateChannelConfig :one
 UPDATE channel_configs
 SET display_name = COALESCE($3, display_name),
     credentials = COALESCE($4, credentials),
-    is_active = COALESCE($5, is_active),
-    updated_at = NOW()
+    is_active = COALESCE($5, is_active)
 WHERE id = $1
     AND workspace_id = $2
     AND deleted_at IS NULL

@@ -191,9 +191,9 @@ type UserPreference struct {
 	WorkspaceID   pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
 	EnvironmentID pgtype.UUID        `db:"environment_id" json:"environment_id"`
 	SubscriberID  pgtype.UUID        `db:"subscriber_id" json:"subscriber_id"`
-	Channel       string             `db:"channel" json:"channel"`
+	Channel       pgtype.Text        `db:"channel" json:"channel"`
 	EventType     pgtype.Text        `db:"event_type" json:"event_type"`
-	IsEnabled     bool               `db:"is_enabled" json:"is_enabled"`
+	IsEnabled     pgtype.Bool        `db:"is_enabled" json:"is_enabled"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }

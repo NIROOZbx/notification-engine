@@ -100,9 +100,9 @@ func (s *subscriberService) UpsertPreference(ctx context.Context, input UpsertPr
 		WorkspaceID:   utils.MustStringToUUID(input.WorkspaceID),
 		EnvironmentID: utils.MustStringToUUID(input.EnvironmentID),
 		SubscriberID:  utils.MustStringToUUID(subscriber.ID),
-		Channel:       input.Channel,
+		Channel:       helpers.Text(input.Channel),
 		EventType:     helpers.Text(input.EventType),
-		IsEnabled:     input.IsEnabled,
+		IsEnabled:     helpers.Bool(input.IsEnabled),
 	}
 
 	pref, err := s.repo.UpsertPreference(ctx, params)

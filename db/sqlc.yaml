@@ -10,4 +10,10 @@ sql:
         sql_package: "pgx/v5"
         emit_json_tags: true
         emit_db_tags: true
-        
+        overrides:
+          - column: "user_preferences.channel"
+            go_type: "github.com/jackc/pgx/v5/pgtype.Text"
+          - column: "user_preferences.is_enabled"
+            go_type: "github.com/jackc/pgx/v5/pgtype.Bool"
+          - column: "user_preferences.event_type"
+            go_type: "github.com/jackc/pgx/v5/pgtype.Text"

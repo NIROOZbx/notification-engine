@@ -6,6 +6,7 @@ type UserDetails struct {
 	AvatarURL string
 	UserID       string
 	HasWorkspace bool `json:"hasWorkspace"`
+	IsVerified   bool `json:"isVerified"`
 }
 type WorkSpaceDetails struct {
 	WorkspaceID   string

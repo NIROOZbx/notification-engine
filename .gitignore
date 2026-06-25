@@ -5,3 +5,12 @@ k6/
 docs/
 .task/
 AGENTS.md
+k8s-compiled/
+
+# Terraform files
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl

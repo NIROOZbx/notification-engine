@@ -237,24 +237,26 @@ const validateAndTouchAPIKey = `-- name: ValidateAndTouchAPIKey :one
     WHERE key_hash = $1
         AND is_revoked = FALSE
         AND (expires_at IS NULL OR expires_at > NOW())
-RETURNING id, workspace_id, environment_id, label
+RETURNING id, workspace_id, environment_id, label, key_hash, key_hint, is_revoked, revoked_at, created_by, last_used_at, created_at, updated_at, expires_at
 `
 
-type ValidateAndTouchAPIKeyRow struct {
-	ID            pgtype.UUID `db:"id" json:"id"`
-	WorkspaceID   pgtype.UUID `db:"workspace_id" json:"workspace_id"`
-	EnvironmentID pgtype.UUID `db:"environment_id" json:"environment_id"`
-	Label         string      `db:"label" json:"label"`
-}
-
-func (q *Queries) ValidateAndTouchAPIKey(ctx context.Context, keyHash string) (ValidateAndTouchAPIKeyRow, error) {
+func (q *Queries) ValidateAndTouchAPIKey(ctx context.Context, keyHash string) (ApiKey, error) {
 	row := q.db.QueryRow(ctx, validateAndTouchAPIKey, keyHash)
-	var i ValidateAndTouchAPIKeyRow
+	var i ApiKey
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
 		&i.EnvironmentID,
 		&i.Label,
+		&i.KeyHash,
+		&i.KeyHint,
+		&i.IsRevoked,
+		&i.RevokedAt,
+		&i.CreatedBy,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }

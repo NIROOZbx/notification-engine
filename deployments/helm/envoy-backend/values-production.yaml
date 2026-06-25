@@ -1,0 +1,56 @@
+replicaCount: 1
+
+image:
+  repository: 711396988882.dkr.ecr.ap-south-1.amazonaws.com/envoy-backend
+  tag: ""
+  pullPolicy: Always
+
+env:
+  REDIS_ADDR: "notification-engine-redis.e1eboh.0001.aps1.cache.amazonaws.com:6379"
+  REDIRECT_URL: https://api.envoy.nirooz.xyz/api/v1/auth/google/callback
+  KAFKA_BROKER: warpstream-agent.warpstream.svc.cluster.local:9092
+  KAFKA_GROUP_ID: notification-engine
+  FRONTEND_URL: https://envoy.nirooz.xyz
+  SYSTEM_EMAIL_PROVIDER: sendgrid
+  COOKIE_SAMESITE: "None"
+  COOKIE_SECURE: "true"
+
+externalSecret:
+  dataFrom:
+    - extractKey: prod/envoy-backend
+
+ingress:
+  enabled: true
+  name: notification-ingress
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    - secretName: notification-engine-tls
+      hosts:
+        - api.envoy.nirooz.xyz
+  rules:
+    - host: api.envoy.nirooz.xyz
+      paths:
+        - path: /api/v1
+          pathType: Prefix
+          serviceName: ""
+          servicePort: 80
+        - path: /webhooks/stripe
+          pathType: Prefix
+          serviceName: billing-service
+          servicePort: 8081
+
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus
+
+prometheusRule:
+  enabled: true
+  labels:
+    release: prometheus
+
+clusterIssuer:
+  enabled: true
+  email: nyroozvp@gmail.com

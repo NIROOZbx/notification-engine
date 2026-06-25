@@ -99,3 +99,127 @@ func TestRemoveMember(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkspaceService_Delete(t *testing.T) {
+	wspID := pgtype.UUID{Bytes: [16]byte{1}, Valid: true}
+	tests := []struct {
+		name          string
+		workspaceID   pgtype.UUID
+		mockSetup     func(m *mocks.WorkspaceRepository)
+		expectedError error
+	}{
+		{
+			name:        "Success: Delete Workspace",
+			workspaceID: wspID,
+			mockSetup: func(m *mocks.WorkspaceRepository) {
+				m.On("DeleteWorkspace", mock.Anything, wspID).Return(nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name:        "Fail: DB Error",
+			workspaceID: wspID,
+			mockSetup: func(m *mocks.WorkspaceRepository) {
+				m.On("DeleteWorkspace", mock.Anything, wspID).Return(pgx.ErrTxClosed) // random DB error
+			},
+			expectedError: pgx.ErrTxClosed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mRepo := new(mocks.WorkspaceRepository)
+			if tt.mockSetup != nil {
+				tt.mockSetup(mRepo)
+			}
+			svc := NewWorkSpaceService(mRepo, nil) // no billing client needed for delete
+			err := svc.Delete(context.Background(), tt.workspaceID)
+			if tt.expectedError != nil {
+				assert.ErrorContains(t, err, tt.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+			mRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestWorkspaceService_UpdateMemberRole(t *testing.T) {
+	wspID := pgtype.UUID{Bytes: [16]byte{1}, Valid: true}
+	callerID := pgtype.UUID{Bytes: [16]byte{2}, Valid: true}
+	targetID := pgtype.UUID{Bytes: [16]byte{3}, Valid: true}
+
+	tests := []struct {
+		name          string
+		params        UpdateMemberRoleParams
+		mockSetup     func(m *mocks.WorkspaceRepository)
+		expectedError error
+	}{
+		{
+			name: "Fail: Caller is Member",
+			params: UpdateMemberRoleParams{
+				WorkspaceID:  wspID,
+				CallerRole:   "member",
+				CallerID:     callerID,
+				TargetUserID: targetID,
+				Role:         "admin",
+			},
+			expectedError: apperrors.ErrForbidden,
+		},
+		{
+			name: "Fail: Assign Owner Role",
+			params: UpdateMemberRoleParams{
+				WorkspaceID:  wspID,
+				CallerRole:   "owner",
+				CallerID:     callerID,
+				TargetUserID: targetID,
+				Role:         "owner",
+			},
+			expectedError: apperrors.ErrForbidden,
+		},
+		{
+			name: "Success: Owner makes Member an Admin",
+			params: UpdateMemberRoleParams{
+				WorkspaceID:  wspID,
+				CallerRole:   "owner",
+				CallerID:     callerID,
+				TargetUserID: targetID,
+				Role:         "admin",
+			},
+			mockSetup: func(m *mocks.WorkspaceRepository) {
+				m.On("GetMemberRole", mock.Anything, sqlc.GetMemberRoleParams{
+					WorkspaceID: wspID,
+					UserID:      targetID,
+				}).Return("member", nil)
+
+				m.On("UpdateMemberRole", mock.Anything, sqlc.UpdateMemberRoleParams{
+					WorkspaceID: wspID,
+					UserID:      targetID,
+					Role:        "admin",
+				}).Return(sqlc.UpdateMemberRoleRow{
+					WorkspaceID: wspID,
+					UserID:      targetID,
+					Role:        "admin",
+				}, nil)
+			},
+			expectedError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mRepo := new(mocks.WorkspaceRepository)
+			if tt.mockSetup != nil {
+				tt.mockSetup(mRepo)
+			}
+			svc := NewWorkSpaceService(mRepo, nil)
+			_, err := svc.UpdateMemberRole(context.Background(), tt.params)
+			if tt.expectedError != nil {
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+			mRepo.AssertExpectations(t)
+		})
+	}
+}

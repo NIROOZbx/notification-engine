@@ -1,0 +1,26 @@
+config:
+  bucketURL: "s3://nirooz-warpstream-data-prod?region=ap-south-1"
+  region: "ap-south-1"
+  virtualClusterID: "vci_60ec6921_7777_4621_b9eb_d4abd343719d"
+  agentKeySecretKeyRef:
+    name: warpstream-static-runtime-secret
+    key: WARPSTREAM_AGENT_KEY
+
+replicas: 1
+
+autoscaling:
+  enabled: false
+
+resources:
+  requests:
+    cpu: "50m"     
+    memory: "256Mi"  
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+serviceAccount:
+  create: true
+  name: "warpstream-agent-sa"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::711396988882:role/prod-warpstream-irsa-role"

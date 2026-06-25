@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+
 	"github.com/NIROOZbx/notification-engine/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -14,6 +15,7 @@ type UserRepository interface {
 	FindUserByProviderID(ctx context.Context, arg sqlc.FindUserByProviderIDParams) (sqlc.User, error)
 	FindUserByEmail(ctx context.Context, email string) (sqlc.User, error)
 	GetAuthContextByEmail(ctx context.Context, email string) (sqlc.GetAuthContextByEmailRow, error)
+	MarkUserAsVerified(ctx context.Context, id pgtype.UUID) (sqlc.User,error) 
 }
 
 type userRepo struct {
@@ -50,4 +52,7 @@ func (r *userRepo) FindUserByEmail(ctx context.Context, email string) (sqlc.User
 
 func (r *userRepo) GetAuthContextByEmail(ctx context.Context, email string) (sqlc.GetAuthContextByEmailRow, error) {
 	return r.queries.GetAuthContextByEmail(ctx, email)
+}
+func (r *userRepo) MarkUserAsVerified(ctx context.Context, id pgtype.UUID) (sqlc.User,error) {
+	return r.queries.MarkUserAsVerified(ctx, id)
 }

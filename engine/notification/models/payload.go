@@ -4,6 +4,7 @@ import "time"
 
 type TriggerPayload struct {
 	ExternalUserID string
+	RecipientEmail string
 	EventType      string
 	Data           map[string]any
 	Channels       []string

@@ -43,14 +43,12 @@ SET status = $2,
     attempt_count = $4,
     sent_at = $5,
     next_retry_at = $6,
-    error_message = $7,
-    updated_at = NOW()
+    error_message = $7
 WHERE id = $1
 RETURNING *;
 -- name: UpdateNotificationStatus :one
 UPDATE notification_logs
-SET status = $2,
-    updated_at = NOW()
+SET status = $2
 WHERE id = $1
 RETURNING *;
 -- name: GetDueScheduledNotifications :many
@@ -81,8 +79,7 @@ SET delivery_status = $2,
         WHEN $2 IN ('failed', 'bounced') THEN $3
         ELSE NULL
     END,
-    provider_response = $4,
-    updated_at = NOW()
+    provider_response = $4
 WHERE provider_message_id = $1;
 -- name: GetNotificationLogByProviderMessageID :one
 SELECT *
@@ -93,6 +90,5 @@ WHERE provider_message_id = $1;
 UPDATE notification_logs
 SET provider_message_id = $2,
     status = 'sent',
-    delivery_status = 'sent',
-    updated_at = NOW()
+    delivery_status = 'sent'
 WHERE id = $1;

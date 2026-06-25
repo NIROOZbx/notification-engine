@@ -44,6 +44,8 @@ type Config struct {
 	RefreshTokenSecret  string
 	AccessExpiryMinutes int
 	RefreshExpiryHours  int
+	CookieSameSite      string
+	CookieSecure        bool
 }
 
 func GenerateTokenPair(cfg Config, payload TokenPayload) (*Pair, error) {
@@ -142,28 +144,44 @@ func ParseRefreshToken(tokenStr string, secretKey []byte) (*RefreshClaims, error
 	return claims, nil
 }
 
-func SetTokenCookies(c fiber.Ctx, pair *Pair, accessExpiryMinutes int, refreshExpiryHours int, isProd bool) {
+func SetTokenCookies(c fiber.Ctx, pair *Pair, cfg Config) {
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
 		Value:    pair.AccessToken,
 		HTTPOnly: true,
-		Secure:   isProd,
-		SameSite: "Lax",
-		MaxAge:   accessExpiryMinutes * 60,
+		Secure:   cfg.CookieSecure,
+		SameSite: cfg.CookieSameSite,
+		MaxAge:   cfg.AccessExpiryMinutes * 60,
 		Path:     "/",
 	})
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    pair.RefreshToken,
 		HTTPOnly: true,
-		Secure:   isProd,
-		SameSite: "Lax",
-		MaxAge:   refreshExpiryHours * 3600,
+		Secure:   cfg.CookieSecure,
+		SameSite: cfg.CookieSameSite,
+		MaxAge:   cfg.RefreshExpiryHours * 3600,
 		Path:     "/",
 	})
 }
 
-func ClearTokenCookies(c fiber.Ctx) {
-	c.Cookie(&fiber.Cookie{Name: "access_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
-	c.Cookie(&fiber.Cookie{Name: "refresh_token", Value: "", HTTPOnly: true, MaxAge: -1, Path: "/"})
+func ClearTokenCookies(c fiber.Ctx, cfg Config) {
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		HTTPOnly: true,
+		Secure:   cfg.CookieSecure,
+		SameSite: cfg.CookieSameSite,
+		MaxAge:   -1,
+		Path:     "/",
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		HTTPOnly: true,
+		Secure:   cfg.CookieSecure,
+		SameSite: cfg.CookieSameSite,
+		MaxAge:   -1,
+		Path:     "/",
+	})
 }

@@ -4,7 +4,7 @@ dotenv: [".env"]
 
 vars:
   MIGRATION_PATH: "db/migration"
-  DB_URL: "postgres://{{.DB_USER}}:{{.DB_PASSWORD}}@localhost:{{.DB_PORT}}/{{.DB_NAME}}?sslmode=disable"
+  DB_URL: "postgres://{{.DB_USER}}:{{.DB_PASSWORD}}@localhost:{{.DB_PORT}}/{{.DB_NAME}}?sslmode=require"
   COMPOSE_FILE: deployments/docker-compose.yml
 
 tasks:
@@ -20,7 +20,7 @@ tasks:
       - proto/*.proto
     generates:
       - proto/*.pb.go
-      
+
   up:
     desc: Starting docker compose (postgres,redis,backend)
     cmds:
@@ -66,16 +66,20 @@ tasks:
     cmds:
       - echo "Forcing database migration..."
       - migrate -path {{.MIGRATION_PATH}} -database "{{.DB_URL}}" force {{.CLI_ARGS}}
-  
+
   gen-sqlc:
     desc: "Generate SQLC code from anywhere"
     dir: C:\notification-engine\db
     cmds:
       - sqlc generate
   mock:
-    desc: "Generate mocks for the WorkspaceRepository"
+    desc: "Generate mocks for repositories and engine core"
     cmds:
-      - mockery --name=WorkspaceRepository --dir=internal/repositories --output=internal/repositories/mocks
+      - mockery --all --dir=internal/repositories --output=internal/repositories/mocks
+      - mockery --name="Repository|Producer|Renderer" --dir=engine/notification/core --output=internal/repositories/mocks
+      - mockery --all --dir=internal/services --output=internal/services/mocks
+      - mockery --all --dir=internal/session --output=internal/session/mocks
+      - mockery --all --dir=internal/billing --output=internal/billing/mocks
 
   start:
     desc: Full boot sequence (Infra -> Migrate -> Logs)
@@ -83,5 +87,81 @@ tasks:
       - task: up
       - echo "⏳ Waiting for database to initialize..."
       - task: migrate-up
-      - echo "🚀 System live. Tailing backend logs..."
-      - docker compose -f {{.COMPOSE_FILE}} logs -f backend
+      # - echo "🚀 System live. Tailing backend logs..."
+      # - docker compose -f {{.COMPOSE_FILE}} logs -f backend
+
+  test-service:
+    desc: "Run all unit tests in the project"
+    cmds:
+      - go test -v ./internal/services
+
+  test-engine:
+    desc: Run unit tests for notification engine core
+    cmds:
+      - go test -v ./engine/notification/core
+
+  build-image:
+    desc: Build the production Docker image for the notification engine backend
+    cmds:
+      - docker build -t envoy-backend:latest .
+
+  k8s-deploy:
+    desc: Deploy all manifests in deployments/k8s/ to Kubernetes
+    cmds:
+      - kubectl apply -f deployments/k8s/
+
+  k8s-delete:
+    desc: Tear down all deployments and services from Kubernetes
+    cmds:
+      - kubectl delete -f deployments/k8s/
+
+  k8s-status:
+    desc: Check the status of all pods, services, ingress, and external secrets
+    cmds:
+      - kubectl get pods,svc,ingress,externalsecret,secret -o wide
+
+  k8s-logs-backend:
+    desc: Tail logs for the envoy-backend pod
+    cmds:
+      - kubectl logs -l app=envoy-backend -f --tail=100
+
+  k8s-logs-billing:
+    desc: Tail logs for the billing-service pod
+    cmds:
+      - kubectl logs -l app=billing-backend -f --tail=100
+
+  tf-init:
+    desc: Initialize Terraform configuration
+    dir: deployments/terraform/prod
+    cmds:
+      - terraform init {{.CLI_ARGS}}
+
+  tf-fmt:
+    desc: Format Terraform configuration files
+    dir: deployments/terraform/prod
+    cmds:
+      - terraform fmt -recursive
+
+  tf-validate:
+    desc: Validate Terraform configuration files
+    dir: deployments/terraform/prod
+    cmds:
+      - terraform validate
+
+  tf-plan:
+    desc: Generate and show a Terraform execution plan
+    dir: deployments/terraform/prod
+    cmds:
+      - terraform plan {{.CLI_ARGS}}
+
+  tf-apply:
+    desc: Builds or changes infrastructure according to Terraform configuration
+    dir: deployments/terraform/prod
+    cmds:
+      - terraform apply {{.CLI_ARGS}}
+
+  tf-destroy:
+    desc: Destroy Terraform-managed infrastructure
+    dir: deployments/terraform/prod
+    cmds:
+      - terraform destroy {{.CLI_ARGS}}

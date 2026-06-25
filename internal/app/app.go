@@ -18,6 +18,7 @@ import (
 	"github.com/NIROOZbx/notification-engine/engine/notification/template"
 	"github.com/NIROOZbx/notification-engine/internal/billing"
 	"github.com/NIROOZbx/notification-engine/internal/handlers"
+	"github.com/NIROOZbx/notification-engine/internal/metrics"
 	"github.com/NIROOZbx/notification-engine/internal/middleware"
 	"github.com/NIROOZbx/notification-engine/internal/repositories"
 	"github.com/NIROOZbx/notification-engine/internal/services"
@@ -29,6 +30,11 @@ import (
 	"github.com/NIROOZbx/notification-engine/pkg/serializer"
 	"github.com/NIROOZbx/notification-engine/pkg/validator"
 
+	"fmt"
+
+	"github.com/NIROOZbx/notification-engine/internal/domain"
+	"github.com/NIROOZbx/notification-engine/internal/utils"
+	"github.com/NIROOZbx/notification-engine/pkg/encryptor"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -64,6 +70,7 @@ type RouterDeps struct {
 	BillingHandler    *handlers.BillingHandler
 	AnalyticsHandler  *handlers.AnalyticsHandler
 	Logger            zerolog.Logger
+	Metrics           *metrics.Metrics
 }
 
 func StartApp(cfg *config.Config) (*App, error) {
@@ -72,7 +79,9 @@ func StartApp(cfg *config.Config) (*App, error) {
 	// 1. INFRASTRUCTURE & UTILS
 	// ==========================================
 
-	appLogger := logger.NewLogger(&cfg.Log)
+	appLogger := logger.NewLogger(&cfg.Log, cfg.Auth.Environment)
+
+	prom := metrics.NewMetrics()
 
 	kafkaCfg := cfg.Kafka
 
@@ -128,7 +137,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	userService := services.NewUserService(usrRepo)
 	workspaceService := services.NewWorkSpaceService(wspRepo, billingClient)
 	authService := services.NewAuthService(&cfg.Auth, userService, workspaceService, store)
-	apiKeyService := services.NewAPIKeyService(apiKeyRepo)
+	apiKeyService := services.NewAPIKeyService(apiKeyRepo, appLogger)
 	subscriberSvc := services.NewSubscriberService(subscriberRepo)
 	chnlConfigSvc := services.NewChannelConfigService(chnlConfigRepo, cfg.SecretKey)
 	templateSvc := services.NewTemplateService(templateRepo, layoutRepo, wspRepo, chnlConfigRepo)
@@ -141,7 +150,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 	//  ENGINE CONFIGURATION
 	// ==========================================
 
-	producer := queue.NewProducer(kafkaCfg.Broker)
+	producer := queue.NewProducer(kafkaCfg.Broker, prom)
 
 	render := template.NewRenderer()
 
@@ -152,6 +161,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 		Renderer:      render,
 		SecretKey:     cfg.SecretKey,
 		BillingClient: billingClient,
+		Metrics:       prom,
 	})
 
 	setUpMockProviders(engine, appLogger)
@@ -160,7 +170,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	setUpProviders(engine, appLogger, httpClient)
 
-	consumers := setUpConsumers(kafkaCfg.Broker, engine, kafkaCfg.GroupID, appLogger)
+	consumers := setUpConsumers(kafkaCfg.Broker, engine, kafkaCfg.GroupID, appLogger, prom)
 
 	// ==========================================
 	// 4. HTTP LAYER (Handlers & Middleware)
@@ -168,7 +178,7 @@ func StartApp(cfg *config.Config) (*App, error) {
 
 	userHandler := handlers.NewUserHandler(userService, workspaceService, appLogger)
 	wspHandler := handlers.NewWorkspaceHandler(workspaceService)
-	authHandler := handlers.NewAuthHandler(authService, &cfg.Auth, appLogger)
+	authHandler := handlers.NewAuthHandler(authService, &cfg.Auth, appLogger, store, engine)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService, appLogger)
 	notifHandler := handlers.NewNotificationHandler(engine, notifRepo, appLogger)
 	subscriberHandler := handlers.NewSubscriberHandler(subscriberSvc, appLogger)
@@ -213,11 +223,12 @@ func StartApp(cfg *config.Config) (*App, error) {
 		BillingHandler:    billingHandler,
 		AnalyticsHandler:  analyticsHandler,
 		Logger:            appLogger,
+		Metrics:           prom,
 	}
 
 	SetUpRoutes(&r, &cfg.CORS)
 
-	return &App{
+	a := &App{
 		Server:    app,
 		Redis:     redis,
 		DB:        db,
@@ -227,7 +238,13 @@ func StartApp(cfg *config.Config) (*App, error) {
 		Scheduler: s,
 		Producer:  producer,
 		wg:        &sync.WaitGroup{},
-	}, nil
+	}
+
+	if err := a.BootstrapSystem(context.Background(), cfg, chnlConfigRepo); err != nil {
+		appLogger.Error().Err(err).Msg("failed to bootstrap system workspace")
+	}
+
+	return a, nil
 }
 
 func setUpProviders(e *core.Engine, log zerolog.Logger, httpClient *http.Client) {
@@ -248,7 +265,7 @@ func setUpMockProviders(e *core.Engine, log zerolog.Logger) {
 
 }
 
-func setUpConsumers(broker string, engine *core.Engine, groupID string, log zerolog.Logger) map[string]queue.Consumer {
+func setUpConsumers(broker string, engine *core.Engine, groupID string, log zerolog.Logger, metrics *metrics.Metrics) map[string]queue.Consumer {
 
 	consumers := make(map[string]queue.Consumer)
 
@@ -261,7 +278,7 @@ func setUpConsumers(broker string, engine *core.Engine, groupID string, log zero
 		}
 
 		taggedLogger := log.With().Str("worker_topic", topic).Logger()
-		consumers[topic] = queue.NewConsumer(broker, topic, groupID, handler, taggedLogger)
+		consumers[topic] = queue.NewConsumer(broker, topic, groupID, handler, taggedLogger, metrics)
 	}
 
 	return consumers
@@ -303,4 +320,49 @@ func (a *App) StopConsumers() {
 			a.Logger.Error().Err(err).Str("topic", topic).Msg("failed to delicately close consumer")
 		}
 	}
+}
+
+func (a *App) BootstrapSystem(ctx context.Context, cfg *config.Config, chnlRepo repositories.ChannelConfigRepo) error {
+	wsID, err := utils.StringToUUID(cfg.Auth.SystemWorkspaceID)
+	if err != nil {
+		return err
+	}
+
+	existing, err := chnlRepo.GetDefaultChannelConfig(ctx, wsID, "email")
+	if err == nil && existing != nil {
+		a.Logger.Info().Msg("system email configuration already exists")
+		return nil
+	}
+
+	a.Logger.Info().Msg("bootstrapping system email configuration...")
+
+	creds := map[string]string{
+		"api_key":    cfg.Auth.SystemEmailAPIKey,
+		"from_email": cfg.Auth.SystemFromEmail,
+	}
+
+	encrypted, err := encryptor.EncryptMap(creds, cfg.SecretKey)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt system credentials: %w", err)
+	}
+
+	provider := cfg.Auth.SystemEmailProvider
+
+	params := domain.CreateChannelConfigParams{
+		WorkspaceID: wsID,
+		Channel:     consts.ChannelEmail,
+		Provider:    provider,
+		DisplayName: "System Email Provider",
+		Credentials: creds,
+		IsActive:    true,
+		IsDefault:   true,
+	}
+
+	_, err = chnlRepo.Create(ctx, encrypted, params)
+	if err != nil {
+		return fmt.Errorf("failed to create system channel config: %w", err)
+	}
+
+	a.Logger.Info().Msg("system email configuration bootstrapped successfully")
+	return nil
 }

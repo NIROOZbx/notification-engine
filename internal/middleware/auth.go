@@ -32,13 +32,14 @@ type AuthMiddleware interface {
 	RequireRole(allowedRoles ...string) fiber.Handler
 }
 
-const gracePeriod = 5 * time.Second
-
 func (a *authMiddleware) Auth(c fiber.Ctx) error {
 
 	claims, err := a.validate(c)
 
 	if err != nil {
+		if errors.Is(err, apperrors.ErrRefreshLockHeld) {
+			return response.TooManyRequests(c, "refresh token already in use, please retry")
+		}
 		a.log.Warn().Err(err).Msg("authentication failed: invalid or missing token")
 		return response.Unauthorized(c, apperrors.ErrForbidden.Error())
 	}
@@ -130,7 +131,9 @@ func (a *authMiddleware) validate(c fiber.Ctx) (*jwt.AccessClaims, error) {
 			return nil, apperrors.ErrUnauthorized
 		}
 		a.log.Debug().Msg("access token expired, attempting silent refresh")
+
 		return a.silentRefresh(c)
+
 	}
 
 	if err != nil {
@@ -143,7 +146,7 @@ func (a *authMiddleware) validate(c fiber.Ctx) (*jwt.AccessClaims, error) {
 	}
 	if claims.Version < version {
 		a.log.Debug().Msg("token version mismatch")
-		jwt.ClearTokenCookies(c)
+		jwt.ClearTokenCookies(c, a.cfg.ToJWTConfig())
 		return nil, apperrors.ErrUnauthorized
 	}
 
@@ -156,7 +159,7 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 	token := c.Cookies("refresh_token")
 
 	if token == "" {
-		jwt.ClearTokenCookies(c)
+		jwt.ClearTokenCookies(c, a.cfg.ToJWTConfig())
 		return nil, apperrors.ErrUnauthorized
 	}
 
@@ -164,7 +167,7 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 
 	if err != nil {
 		a.log.Warn().Err(err).Msg("failed to parse refresh token during silent refresh")
-		jwt.ClearTokenCookies(c)
+		jwt.ClearTokenCookies(c, a.cfg.ToJWTConfig())
 		return nil, apperrors.ErrUnauthorized
 	}
 
@@ -179,22 +182,18 @@ func (a *authMiddleware) silentRefresh(c fiber.Ctx) (*jwt.AccessClaims, error) {
 		return nil, apperrors.ErrUnauthorized
 	}
 
-	blacklistedAt, err := a.store.IsRefreshBlacklisted(c.Context(), refreshClaims.TokenID)
+	alreadyClaimed, err := a.store.ClaimRefreshToken(c.Context(), refreshClaims.TokenID, 30*time.Second)
 
 	if err != nil {
-		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("redis down during blacklist check")
+		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("redis down during token claim")
 		return nil, apperrors.ErrInternal
 	}
-	if !blacklistedAt.IsZero() && time.Since(blacklistedAt) <= gracePeriod{
-			a.log.Warn().Str("userID", refreshClaims.UserID).Str("tokenID", refreshClaims.TokenID).Msg("refresh token is blacklisted")
-		a.store.UpgradeTokenVersion(c.Context(), refreshClaims.UserID)
-		jwt.ClearTokenCookies(c)
-		return nil, apperrors.ErrUnauthorized
+
+	if alreadyClaimed {
+		a.log.Debug().Str("tokenID", refreshClaims.TokenID).Msg("token already claimed by another request")
+		return nil, apperrors.ErrRefreshLockHeld
 	}
 
-	if err := a.store.BlackListRefreshToken(c.Context(), refreshClaims.TokenID, refreshClaims.IssuedAt.Time); err != nil {
-		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("failed to blacklist token")
-	}
 	newVer, err := a.store.GetTokenVersion(c.Context(), refreshClaims.UserID)
 	if err != nil {
 		a.log.Error().Err(err).Str("userID", refreshClaims.UserID).Msg("failed to fetch token version during silent refresh")

@@ -23,9 +23,11 @@ import (
 type AuthService interface {
 	HandleOAuthCallback(ctx context.Context, user *dtos.OAuthUserDetails) (*dtos.AuthResponse, *jwt.Pair, error)
 	CompleteOnboarding(ctx context.Context, userID pgtype.UUID, workspaceName string) (*dtos.AuthResponse, *jwt.Pair, error)
-	Register(ctx context.Context, req dtos.RegisterRequest) (*dtos.AuthResponse, *jwt.Pair, error)
+	Register(ctx context.Context, req dtos.RegisterRequest) (*sqlc.User, error)
 	Login(ctx context.Context, req dtos.LoginRequest) (*dtos.AuthResponse, *jwt.Pair, error)
 	Logout(ctx context.Context, userID pgtype.UUID, refreshToken string) error
+	VerifyEmail(ctx context.Context, token string) (*dtos.AuthResponse, *jwt.Pair, error)
+	FindUserByEmail(ctx context.Context, email string) (*sqlc.User, error)
 }
 
 type authService struct {
@@ -54,12 +56,12 @@ func NewAuthService(cfg *config.AuthConfig,
 	}
 }
 
-func (a *authService) Register(ctx context.Context, req dtos.RegisterRequest) (*dtos.AuthResponse, *jwt.Pair, error) {
+func (a *authService) Register(ctx context.Context, req dtos.RegisterRequest) (*sqlc.User, error) {
 
 	hashedPassword, err := helpers.HashPassword(req.Password)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to hash password: %w", err)
+		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 	user, err := a.userSvc.CreateUser(ctx, CreateUser{
 		Email:        req.Email,
@@ -69,11 +71,11 @@ func (a *authService) Register(ctx context.Context, req dtos.RegisterRequest) (*
 
 	if err != nil {
 		if apperrors.IsUniqueViolation(err) {
-			return nil, nil, apperrors.NewAlreadyExistsError("email")
+			return nil, apperrors.NewAlreadyExistsError("email")
 		}
-		return nil, nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
-	return a.buildAuthResult(ctx, user, nil, false, "")
+	return user, nil
 }
 
 func (a *authService) Login(ctx context.Context, req dtos.LoginRequest) (*dtos.AuthResponse, *jwt.Pair, error) {
@@ -88,6 +90,10 @@ func (a *authService) Login(ctx context.Context, req dtos.LoginRequest) (*dtos.A
 	user := &authCtx.User
 	if !user.PasswordHash.Valid {
 		return nil, nil, apperrors.ErrUnauthorized
+	}
+
+	if !user.IsVerified{
+		return nil,nil,apperrors.ErrNotVerified
 	}
 
 	err = helpers.ComparePassword(user.PasswordHash.String, req.Password)
@@ -224,6 +230,35 @@ func (a *authService) generateSession(ctx context.Context, p sessionParams) (*jw
 
 }
 
+
+func (a *authService) VerifyEmail(ctx context.Context, token string) (*dtos.AuthResponse, *jwt.Pair, error) {
+	key := fmt.Sprintf("email-verify:%s", token)
+	userID, err := a.store.Get(ctx, key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid or expired token: %w", err)
+	}
+
+	userUUID, err := utils.StringToUUID(userID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid user id in store: %w", err)
+	}
+
+	dbUser, err := a.userSvc.MarkUserAsVerified(ctx, userUUID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to verify user: %w", err)
+	}
+
+	if delErr := a.store.Delete(ctx, key); delErr != nil {
+		log.Printf("failed to delete verification token from redis: %v", delErr)
+	}
+
+	return a.buildAuthResult(ctx, dbUser, nil, false, "")
+}
+
+func (a *authService) FindUserByEmail(ctx context.Context, email string) (*sqlc.User, error) {
+	return a.userSvc.FindUserByEmail(ctx, email)
+}
+
 func mapToDTO(user *sqlc.User, wsp *dtos.WorkspaceResponse, role string) (*dtos.AuthResponse, error) {
 	userID := utils.UUIDToString(user.ID)
 	if userID == "" {
@@ -242,6 +277,7 @@ func mapToDTO(user *sqlc.User, wsp *dtos.WorkspaceResponse, role string) (*dtos.
 			Name:         user.FullName,
 			AvatarURL:    avatarURL,
 			HasWorkspace: wsp != nil,
+			IsVerified:   user.IsVerified,
 		},
 	}
 

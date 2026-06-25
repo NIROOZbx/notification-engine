@@ -290,8 +290,7 @@ UPDATE templates
 SET name = $3,
   description = $4,
   status = $5,
-  layout_id = $6,
-  updated_at = NOW()
+  layout_id = $6
 WHERE id = $1
   AND workspace_id = $2
 RETURNING id, workspace_id, environment_id, layout_id, created_by, name, description, event_type, status, created_at, updated_at

@@ -1,0 +1,12 @@
+Install rendered resources with:
+
+  helm install {{ .Release.Name }} {{ .Chart.Name }} -n {{ .Release.Namespace }}
+
+The backend service name is:
+
+  {{ include "envoy-backend.fullname" . }}
+
+The app exposes:
+
+  /health
+  /metrics

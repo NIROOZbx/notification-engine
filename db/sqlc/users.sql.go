@@ -12,9 +12,14 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-
-INSERT INTO users (id,email, full_name, password_hash, auth_provider)
-VALUES (gen_random_uuid(),$1, $2, $3, 'local')
+INSERT INTO users (
+        id,
+        email,
+        full_name,
+        password_hash,
+        auth_provider
+    )
+VALUES (gen_random_uuid(), $1, $2, $3, 'local')
 RETURNING id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
 `
 
@@ -45,7 +50,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const findUserByEmail = `-- name: FindUserByEmail :one
-SELECT id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at FROM users
+SELECT id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
+FROM users
 WHERE email = $1
 LIMIT 1
 `
@@ -71,7 +77,8 @@ func (q *Queries) FindUserByEmail(ctx context.Context, email string) (User, erro
 }
 
 const findUserByID = `-- name: FindUserByID :one
-SELECT id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at FROM users
+SELECT id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
+FROM users
 WHERE id = $1
 LIMIT 1
 `
@@ -97,9 +104,10 @@ func (q *Queries) FindUserByID(ctx context.Context, id pgtype.UUID) (User, error
 }
 
 const findUserByProviderID = `-- name: FindUserByProviderID :one
-SELECT id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at FROM users
+SELECT id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
+FROM users
 WHERE auth_provider = $1
-AND provider_id = $2
+    AND provider_id = $2
 LIMIT 1
 `
 
@@ -135,9 +143,9 @@ SELECT u.id, u.email, u.password_hash, u.full_name, u.auth_provider, u.provider_
     w.name AS workspace_name,
     w.slug AS workspace_slug
 FROM users as u
-LEFT JOIN workspace_members m ON u.id = m.user_id
-LEFT JOIN workspaces w ON m.workspace_id = w.id
-WHERE u.email = $1 
+    LEFT JOIN workspace_members m ON u.id = m.user_id
+    LEFT JOIN workspaces w ON m.workspace_id = w.id
+WHERE u.email = $1
 LIMIT 1
 `
 
@@ -174,13 +182,15 @@ func (q *Queries) GetAuthContextByEmail(ctx context.Context, email string) (GetA
 }
 
 const getUserAuthContext = `-- name: GetUserAuthContext :one
-SELECT 
-    u.id, 
+SELECT u.id,
     COALESCE(m.role, 'member') as role,
-    COALESCE(m.workspace_id, '00000000-0000-0000-0000-000000000000')::uuid as workspace_id
+    COALESCE(
+        m.workspace_id,
+        '00000000-0000-0000-0000-000000000000'
+    )::uuid as workspace_id
 FROM users u
-LEFT JOIN workspace_members m ON u.id = m.user_id
-WHERE u.id = $1 
+    LEFT JOIN workspace_members m ON u.id = m.user_id
+WHERE u.id = $1
 LIMIT 1
 `
 
@@ -198,18 +208,17 @@ func (q *Queries) GetUserAuthContext(ctx context.Context, id pgtype.UUID) (GetUs
 }
 
 const getUserWithWorkspace = `-- name: GetUserWithWorkspace :one
-SELECT 
-    u.id AS user_id, 
-    u.full_name, 
-    u.email, 
+SELECT u.id AS user_id,
+    u.full_name,
+    u.email,
     u.avatar_url,
     COALESCE(m.role, 'member')::varchar AS role,
     COALESCE(w.id, '00000000-0000-0000-0000-000000000000')::uuid AS workspace_id,
     COALESCE(w.name, '')::varchar AS workspace_name,
     COALESCE(w.slug, '')::varchar AS slug
 FROM users u
-LEFT JOIN workspace_members m ON u.id = m.user_id
-LEFT JOIN workspaces w ON m.workspace_id = w.id
+    LEFT JOIN workspace_members m ON u.id = m.user_id
+    LEFT JOIN workspaces w ON m.workspace_id = w.id
 WHERE u.id = $1
 `
 
@@ -240,29 +249,60 @@ func (q *Queries) GetUserWithWorkspace(ctx context.Context, id pgtype.UUID) (Get
 	return i, err
 }
 
+const markUserAsVerified = `-- name: MarkUserAsVerified :one
+UPDATE users
+SET is_verified = true
+WHERE id = $1
+RETURNING id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
+`
+
+func (q *Queries) MarkUserAsVerified(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, markUserAsVerified, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FullName,
+		&i.AuthProvider,
+		&i.ProviderID,
+		&i.AvatarUrl,
+		&i.IsVerified,
+		&i.IsActive,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertOAuthUser = `-- name: UpsertOAuthUser :one
 INSERT INTO users (
-    id,
-    email,
-    full_name,
-    auth_provider,
-    provider_id,
-    avatar_url,
-    is_verified,
-    last_login_at
-) VALUES (
-    gen_random_uuid(),
-    $1, $2, $3, $4, $5,
-    true,
-    NOW()
-)
-ON CONFLICT (email) 
-DO UPDATE SET 
-    full_name     = EXCLUDED.full_name,
-    avatar_url    = EXCLUDED.avatar_url,
-    auth_provider      = EXCLUDED.auth_provider,
-    provider_id   = EXCLUDED.provider_id,
-    last_login_at = NOW() 
+        id,
+        email,
+        full_name,
+        auth_provider,
+        provider_id,
+        avatar_url,
+        is_verified,
+        last_login_at
+    )
+VALUES (
+        gen_random_uuid(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        true,
+        NOW()
+    ) ON CONFLICT (email) DO
+UPDATE
+SET full_name = EXCLUDED.full_name,
+    avatar_url = EXCLUDED.avatar_url,
+    auth_provider = EXCLUDED.auth_provider,
+    provider_id = EXCLUDED.provider_id,
+    last_login_at = NOW()
 RETURNING id, email, password_hash, full_name, auth_provider, provider_id, avatar_url, is_verified, is_active, last_login_at, created_at, updated_at
 `
 

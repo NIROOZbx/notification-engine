@@ -29,21 +29,22 @@ type UserService interface {
 	FindUserByEmail(ctx context.Context, email string) (*sqlc.User, error)
 	FindUserByProviderID(ctx context.Context, provider, providerID string) (*sqlc.User, error)
 	CreateUser(ctx context.Context, params CreateUser) (*sqlc.User, error)
-    GetFullUserDetails(ctx context.Context,userID pgtype.UUID)(*sqlc.GetUserWithWorkspaceRow,error)
+	GetFullUserDetails(ctx context.Context, userID pgtype.UUID) (*sqlc.GetUserWithWorkspaceRow, error)
 	GetAuthContextByEmail(ctx context.Context, email string) (*sqlc.GetAuthContextByEmailRow, error)
+	MarkUserAsVerified(ctx context.Context, id pgtype.UUID) (*sqlc.User,error)
 }
 
 type userService struct {
 	repo repositories.UserRepository
 }
 
-func ( u *userService) GetFullUserDetails(ctx context.Context,userID pgtype.UUID)(*sqlc.GetUserWithWorkspaceRow,error){
+func (u *userService) GetFullUserDetails(ctx context.Context, userID pgtype.UUID) (*sqlc.GetUserWithWorkspaceRow, error) {
 
-  row, err := u.repo.GetUserWithWorkspace(ctx, userID)
-    if err != nil {
-        return nil, err
-    }
-    return &row, nil
+	row, err := u.repo.GetUserWithWorkspace(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 
 }
 
@@ -57,19 +58,18 @@ func (u *userService) GetAuthContextByEmail(ctx context.Context, email string) (
 
 func (u *userService) CreateUser(ctx context.Context, params CreateUser) (*sqlc.User, error) {
 
-    args:=sqlc.CreateUserParams{
-        Email: params.Email,
-        FullName: params.FullName,
-        PasswordHash: pgtype.Text{
-            String: params.PasswordHash,
-            Valid: params.PasswordHash!="",
-        },
-    }
+	args := sqlc.CreateUserParams{
+		Email:    params.Email,
+		FullName: params.FullName,
+		PasswordHash: pgtype.Text{
+			String: params.PasswordHash,
+			Valid:  params.PasswordHash != "",
+		},
+	}
 
+	user, err := u.repo.CreateUser(ctx, args)
 
-  user,err:=  u.repo.CreateUser(ctx,args)
-
-  return &user,err
+	return &user, err
 
 }
 
@@ -129,4 +129,13 @@ func NewUserService(repo repositories.UserRepository) UserService {
 	return &userService{
 		repo: repo,
 	}
+}
+func (s *userService) MarkUserAsVerified(ctx context.Context, id pgtype.UUID) (*sqlc.User,error) {
+	user,err:=s.repo.MarkUserAsVerified(ctx,id)
+
+	if err!=nil{
+		return nil,fmt.Errorf("marking user verified:%w",err)
+	}
+
+	return &user,nil
 }

@@ -178,8 +178,7 @@ const updateLayout = `-- name: UpdateLayout :one
 UPDATE layouts
 SET
     name = $3,
-    html = $4,
-    updated_at = NOW()
+    html = $4
 WHERE id = $1 AND workspace_id = $2
 RETURNING id, workspace_id, name, is_default, html, created_at, updated_at
 `

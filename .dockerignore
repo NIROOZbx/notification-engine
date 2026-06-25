@@ -5,3 +5,7 @@ docs/
 build/
 logs/
 AGENTS.md
+deployments/terraform/
+k8s-compiled/
+.task/
+.terraform.lock.hcl

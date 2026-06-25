@@ -1,0 +1,21 @@
+apiVersion: skaffold/v4beta14
+kind: Config
+metadata:
+  name: envoy-backend-service
+build:
+  local:
+    push: false
+  artifacts:
+    - image: envoy-backend
+      context: . 
+      docker:
+        dockerfile: Dockerfile
+      hooks:
+        before:
+          - command: ["cmd", "/c", "mkdir k8s-compiled 2>nul & helm template envoy-backend deployments/helm/envoy-backend -f deployments/helm/envoy-backend/values.yaml > k8s-compiled/envoy-backend.yaml"]
+manifests:
+
+  rawYaml:
+    - k8s-compiled/envoy-backend.yaml
+deploy:
+  kubectl: {}

@@ -13,27 +13,27 @@ log:
   max_age_days: 7
 
 database:
-  max_open_conns: 50
-  min_open_conns: 25
-  max_idle_conns: 25
-  max_conn_lifetime: "30m"
-  max_idle_time: "5m"
+  max_open_conns: 5
+  min_open_conns: 1
+  max_idle_conns: 2
+  max_conn_lifetime: "5m"
+  max_idle_time: "1m"
 
 rate_limit:
   requests_per_minute: 100
   burst: 20
-
-redis:
-  addr: "redis:6379"
-
+  
 auth:
   access_expiry_minutes: 15
   refresh_expiry_hours: 168
-  environment: development
-  frontend_url: "http://localhost:5173"
+  environment: production
+  frontend_url:  "https://envoy.nirooz.xyz"
+  cookie_samesite: "Lax"
+  cookie_secure: false
 
 cors:
   allowed_origins:
     - "http://localhost:3000"
     - "http://localhost:5173"
     - "http://localhost:5174"
+    - "https://envoy.nirooz.xyz"

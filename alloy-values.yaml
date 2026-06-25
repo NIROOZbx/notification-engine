@@ -1,0 +1,35 @@
+alloy:
+  config: |
+    local.file_match "kubernetes_pods" {
+      path_targets = [{"__path__" = "/var/log/pods/*/*/*.log"}]
+    }
+
+    loki.source.file "pod_logs" {
+      targets    = local.file_match.kubernetes_pods.targets
+      forward_to = [loki.process.log_pipeline.receiver]
+    }
+
+    loki.process "log_pipeline" {
+      forward_to = [loki.write.loki_database.receiver]
+
+      stage.cri {}
+
+      stage.json {
+        expressions = {
+          level   = "level",
+          message = "message",
+        }
+      }
+
+      stage.labels {
+        values = {
+          level = "level",
+        }
+      }
+    }
+
+    loki.write "loki_database" {
+      endpoint {
+        url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+      }
+    }

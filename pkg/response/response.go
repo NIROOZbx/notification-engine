@@ -73,3 +73,11 @@ func Forbidden(c fiber.Ctx, data interface{}, message string) error {
 		"error":   message,
 	})
 }
+
+func TooManyRequests(c fiber.Ctx, message string) error {
+  return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+        "success": false,
+        "data":    nil,
+        "error":   message,
+    })
+}

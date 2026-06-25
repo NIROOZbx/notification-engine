@@ -2,9 +2,12 @@ package queue
 
 import (
 	"context"
+	"strconv"
+	"time"
 
 	"github.com/NIROOZbx/notification-engine/engine/notification/models"
-	"github.com/bytedance/sonic"
+	"github.com/NIROOZbx/notification-engine/internal/metrics"
+	"github.com/NIROOZbx/notification-engine/pkg/serializer"
 	"github.com/rs/zerolog"
 	"github.com/segmentio/kafka-go"
 )
@@ -20,9 +23,10 @@ type consumer struct {
 	reader      *kafka.Reader
 	processFunc ProcessFunc
 	log         zerolog.Logger
+	metrics     *metrics.Metrics
 }
 
-func NewConsumer(brokerAddr string, topic string,groupID string, fn ProcessFunc, log zerolog.Logger) *consumer {
+func NewConsumer(brokerAddr string, topic string, groupID string, fn ProcessFunc, log zerolog.Logger, metrics *metrics.Metrics) *consumer {
 	return &consumer{
 		reader: kafka.NewReader(kafka.ReaderConfig{
 			Topic:   topic,
@@ -33,6 +37,7 @@ func NewConsumer(brokerAddr string, topic string,groupID string, fn ProcessFunc,
 		}),
 		processFunc: fn,
 		log:         log,
+		metrics:     metrics,
 	}
 }
 
@@ -49,7 +54,7 @@ func (c *consumer) Start(ctx context.Context) error {
 			continue
 		}
 		event := &models.NotificationEvent{}
-		if err := sonic.Unmarshal(msg.Value, event); err != nil {
+		if err := serializer.Unmarshal(msg.Value, event); err != nil {
 			c.log.Error().Err(err).Msg("failed to unmarshal notification event")
 			c.reader.CommitMessages(ctx, msg)
 			continue
@@ -65,11 +70,20 @@ func (c *consumer) Start(ctx context.Context) error {
 			continue 
 		}
 
-		if err:=c.reader.CommitMessages(ctx,msg); err!=nil{
-			 c.log.Error().Err(err).Msg("failed to commit message")
+		if err := c.reader.CommitMessages(ctx, msg); err != nil {
+			c.log.Error().Err(err).Msg("failed to commit message")
+		}
+
+		if c.metrics != nil {
+			stats := c.reader.Stats()
+			c.metrics.KafkaConsumerLag.WithLabelValues(msg.Topic, strconv.Itoa(msg.Partition)).Set(float64(stats.Lag))
+
+			if event.PublishedAt > 0 {
+				queueTime := float64(time.Now().UnixNano()-event.PublishedAt) / float64(time.Second)
+				c.metrics.KafkaMessageQueueTime.WithLabelValues(msg.Topic, event.Channel).Observe(queueTime)
+			}
 		}
 	}
-
 }
 
 func (c *consumer) Close() error {

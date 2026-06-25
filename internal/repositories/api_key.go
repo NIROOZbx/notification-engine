@@ -8,22 +8,22 @@ import (
 )
 
 type APIKeyRepository interface {
-    GetEnvironment(ctx context.Context, id pgtype.UUID) (sqlc.Environment, error)
-    GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error)
-    CountActiveKeys(ctx context.Context, workspaceID pgtype.UUID) (int64, error)
-    Create(ctx context.Context, arg sqlc.CreateApiKeyParams) (sqlc.ApiKey, error)
-    List(ctx context.Context, arg sqlc.ListAPIKeysByWorkspaceAndEnvParams) ([]sqlc.ListAPIKeysByWorkspaceAndEnvRow, error)
-    Revoke(ctx context.Context, arg sqlc.RevokeAPIKeyParams) (sqlc.RevokeAPIKeyRow, error)
-    Delete(ctx context.Context, arg sqlc.DeleteAPIKeyParams) (int64, error)
-    ValidateAndTouch(ctx context.Context, hash string) (sqlc.ValidateAndTouchAPIKeyRow, error)
+	GetEnvironment(ctx context.Context, id pgtype.UUID) (sqlc.Environment, error)
+	GetWorkspaceWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.GetWorkspaceWithPlanRow, error)
+	CountActiveKeys(ctx context.Context, workspaceID pgtype.UUID) (int64, error)
+	Create(ctx context.Context, arg sqlc.CreateApiKeyParams) (sqlc.ApiKey, error)
+	List(ctx context.Context, arg sqlc.ListAPIKeysByWorkspaceAndEnvParams) ([]sqlc.ListAPIKeysByWorkspaceAndEnvRow, error)
+	Revoke(ctx context.Context, arg sqlc.RevokeAPIKeyParams) (sqlc.RevokeAPIKeyRow, error)
+	Delete(ctx context.Context, arg sqlc.DeleteAPIKeyParams) (int64, error)
+	ValidateAndTouch(ctx context.Context, hash string) (sqlc.ApiKey, error)
 }
 
 type apiKeyRepo struct {
-    queries *sqlc.Queries
+	queries *sqlc.Queries
 }
 
 func NewAPIKeyRepository(queries *sqlc.Queries) APIKeyRepository {
-    return &apiKeyRepo{queries: queries}
+	return &apiKeyRepo{queries: queries}
 }
 
 func (r *apiKeyRepo) GetEnvironment(ctx context.Context, id pgtype.UUID) (sqlc.Environment, error) {
@@ -54,6 +54,6 @@ func (r *apiKeyRepo) Delete(ctx context.Context, arg sqlc.DeleteAPIKeyParams) (i
 	return r.queries.DeleteAPIKey(ctx, arg)
 }
 
-func (r *apiKeyRepo) ValidateAndTouch(ctx context.Context, hash string) (sqlc.ValidateAndTouchAPIKeyRow, error) {
+func (r *apiKeyRepo) ValidateAndTouch(ctx context.Context, hash string) (sqlc.ApiKey, error) {
 	return r.queries.ValidateAndTouchAPIKey(ctx, hash)
 }

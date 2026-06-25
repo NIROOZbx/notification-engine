@@ -23,6 +23,11 @@ const (
 	BillingProviderStripe = "stripe"
 )
 
+const (
+    EmailVerificationTTL = 15 * time.Minute
+    PasswordResetTTL    = 30 * time.Minute
+    AuthTokenCacheTTL   = 24 * time.Hour
+)
 
 const (
 	ChannelEmail    = "email"

@@ -18,7 +18,10 @@ var (
 	ErrInternal          = errors.New("internal server error")
 	ErrBadRequest        = errors.New("bad request")
 	ErrUnauthorized      = errors.New("unauthorized: invalid or missing session")
-	ErrLimitReached      = errors.New("plan limit reached: please upgrade your plan")
+	ErrRefreshLockHeld   = errors.New("refresh token is locked by another request, please retry")
+
+	ErrNotVerified  = errors.New("email not verified")
+	ErrLimitReached = errors.New("plan limit reached: please upgrade your plan")
 
 	// layout specific
 	ErrDefaultExists = errors.New("a default layout already exists in this workspace")

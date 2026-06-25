@@ -28,8 +28,7 @@ ORDER BY created_at DESC;
 UPDATE layouts
 SET
     name = $3,
-    html = $4,
-    updated_at = NOW()
+    html = $4
 WHERE id = $1 AND workspace_id = $2
 RETURNING *;
 

@@ -81,7 +81,11 @@ func (h *NotificationHandler) Trigger(c fiber.Ctx) error {
 		return helpers.HandleServiceError(c, err, h.log)
 	}
 
-	log.Info().Str("event_type", req.EventType).Msg("notification ingested")
+	log.Info().
+		Str("event_type", req.EventType).
+		Str("workspace_id", workspaceID.String()).
+		Str("env_id", envID.String()).
+		Msg("notification ingested")
 	return response.Accepted(c, "notification queued", nil)
 }
 
