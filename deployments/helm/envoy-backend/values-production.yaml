@@ -1,10 +1,8 @@
 replicaCount: 1
-
 image:
   repository: 711396988882.dkr.ecr.ap-south-1.amazonaws.com/envoy-backend
-  tag: ""
+  tag: "195b2986abd3a9e2b23b1b785c26a01dee197168"
   pullPolicy: Always
-
 env:
   REDIS_ADDR: "notification-engine-redis.e1eboh.0001.aps1.cache.amazonaws.com:6379"
   REDIRECT_URL: https://api.envoy.nirooz.xyz/api/v1/auth/google/callback
@@ -14,11 +12,9 @@ env:
   SYSTEM_EMAIL_PROVIDER: sendgrid
   COOKIE_SAMESITE: "None"
   COOKIE_SECURE: "true"
-
 externalSecret:
   dataFrom:
     - extractKey: prod/envoy-backend
-
 ingress:
   enabled: true
   name: notification-ingress
@@ -40,17 +36,14 @@ ingress:
           pathType: Prefix
           serviceName: billing-service
           servicePort: 8081
-
 serviceMonitor:
   enabled: true
   labels:
     release: prometheus
-
 prometheusRule:
   enabled: true
   labels:
     release: prometheus
-
 clusterIssuer:
   enabled: true
   email: nyroozvp@gmail.com
