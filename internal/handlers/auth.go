@@ -196,9 +196,6 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	return response.OK(c, "logged out successfully", nil)
 }
 
-func (h *AuthHandler) isProd() bool {
-	return h.cfg.Environment == "production"
-}
 
 func (h *AuthHandler) sendVerificationEmail(ctx context.Context, userID, email string) error {
 	tkn, err := helpers.GenerateSecureToken()

@@ -147,11 +147,11 @@ func (a *authService) HandleOAuthCallback(ctx context.Context, user *dtos.OAuthU
 	}
 
 	member, err := a.workspaceSvc.GetWorkspaceMemberByUserID(ctx, dbUser.ID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !errors.Is(err, apperrors.ErrNotFound) {
 		return nil, nil, fmt.Errorf("checking membership: %w", err)
 	}
 
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, apperrors.ErrNotFound) {
 		return a.buildAuthResult(ctx, dbUser, nil, false, "")
 	}
 

@@ -234,30 +234,35 @@ func (e *Engine) ingestChannel(ctx context.Context, ic *ingestContext) error {
 	ic.preference = preference
 	l.Info().Str("recipient", ic.contact.ContactValue).Msg("found recipient contact")
 
-	resp, existingLog, err := parallel.Query2(ctx,
-		func(ctx context.Context) (*billing.CheckLimitResponse, error) {
-			return e.billingClient.CheckLimit(ctx, ic.workspaceID, ic.envID, ic.ch.Channel)
-		},
-		func(ctx context.Context) (*NotificationLog, error) {
-			return e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
-		},
-	)
-	l.Debug().
-		Str("workspace_id", ic.workspaceID).
-		Str("env_id", ic.envID).	
-		Str("external_user_id", ic.payload.ExternalUserID).
-		Str("channel", ic.ch.Channel).
-		Bool("contact_found", ic.contact != nil).
-		Msg("Ingestion checks completed")
+	var resp *billing.CheckLimitResponse
+	var existingLog *NotificationLog
+
+	if ic.strategy.SkipBillingCheck() {
+		var err error
+		existingLog, err = e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
+		if err != nil {
+			l.Error().Err(err).Msg("ingestion idempotency check failed")
+			return err
+		}
+	} else {
+		var err error
+		resp, existingLog, err = parallel.Query2(ctx,
+			func(ctx context.Context) (*billing.CheckLimitResponse, error) {
+				return e.billingClient.CheckLimit(ctx, ic.workspaceID, ic.envID, ic.ch.Channel)
+			},
+			func(ctx context.Context) (*NotificationLog, error) {
+				return e.repo.GetNotificationLogByIdempotencyKey(ctx, channelKey)
+			},
+		)
+		if err != nil {
+			l.Error().Err(err).Msg("parallel ingestion checks failed")
+			return err
+		}
+	}
 
 	if existingLog != nil {
 		l.Info().Msg("duplicate idempotency key, skipping")
 		return nil
-	}
-
-	if err != nil {
-		l.Error().Err(err).Msg("parallel ingestion checks failed")
-		return err
 	}
 
 	if !ic.strategy.SkipBillingCheck() && resp != nil {

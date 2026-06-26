@@ -63,9 +63,6 @@ func TestEngine_Ingest(t *testing.T) {
 				mRepo.On("GetActiveChannelsByTemplateID", mock.Anything, "tpl_1").
 					Return([]core.TemplateChannel{{Channel: "email", IsActive: true}}, nil)
 
-				mBilling.On("CheckLimit", mock.Anything, workspaceID, envID, "email").
-					Return(&billing.CheckLimitResponse{Allowed: true}, nil)
-
 				mRepo.On("GetNotificationLogByIdempotencyKey", mock.Anything, "idem_1:email").
 					Return(nil, nil) // No duplicate log found
 

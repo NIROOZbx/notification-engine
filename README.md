@@ -12,12 +12,18 @@
 | **Framework** | Fiber v3 | High-performance HTTP web framework |
 | **API Gateway** | NGINX | Endpoint routing, Rate Limiting, Load Balancing |
 | **Database** | PostgreSQL | Relational database (`pgxpool` + `sqlc`) |
-| **Cache / Sessions** | Redis | In-memory store for sessions and data |
+| **Cache / Sessions** | Redis / ElastiCache | In-memory store (local dev) / managed Redis (production) |
 | **Message Queue** | Apache Kafka (KRaft) | Async notification delivery pipeline |
+| **Container Registry** | Amazon ECR | Docker image storage for envoy-backend and billing-service |
+| **Container Orchestration** | Amazon EKS (K8s 1.35) | Production Kubernetes cluster (`envoy-cluster`) |
+| **Infrastructure as Code** | Terraform (AWS) | VPC, EKS, ECR, ElastiCache, IAM OIDC roles |
+| **GitOps** | Argo CD | Declarative Kubernetes deployment (App of Apps pattern) |
 | **Billing** | gRPC (Billing Service) | Usage tracking, quota enforcement, Stripe |
 | **Authentication** | OAuth2 + JWT | Google OAuth (`goth`), stateless JWT sessions |
+| **Monitoring** | Prometheus + Grafana Alloy | Metrics collection, service monitors, alerting rules |
 | **Logging** | `zerolog` | Structured, leveled JSON logging |
-| **Code Generation** | `sqlc` | Type-safe SQL code generation |
+| **Code Generation** | `sqlc` + `protoc` | Type-safe SQL and protobuf/gRPC code generation |
+| **Load Testing** | K6 | Performance and stress testing |
 
 ---
 
@@ -52,50 +58,75 @@
 
 ```text
 notification-engine/
-├── cmd/                        # Application entrypoint
-├── config/                     # Viper config + YAML
-├── consts/                     # Global constants (topics, statuses, etc.)
+├── .github/
+│   └── workflows/
+│       └── deploy.yml              # CI/CD: test, build ECR, GitOps writeback
+├── cmd/                            # Application entrypoint
+├── config/                         # Viper config + YAML
+├── consts/                         # Global constants (topics, statuses, etc.)
 ├── db/
-│   ├── migration/              # PostgreSQL migrations (up/down)
-│   ├── query/                  # Raw SQL queries (sqlc input)
-│   └── sqlc/                   # sqlc-generated type-safe Go code
+│   ├── migration/                  # PostgreSQL migrations (up/down)
+│   ├── query/                      # Raw SQL queries (sqlc input)
+│   └── sqlc/                       # sqlc-generated type-safe Go code
 ├── deployments/
-│   ├── docker-compose.yml      # Postgres, Redis, Kafka, Backend
-│   └── nginx.conf              # NGINX rate limiting and routing config
+│   ├── argocd/
+│   │   ├── root-app.yaml           # ArgoCD App of Apps root
+│   │   └── apps/                   # Child app manifests (envoy-backend, billing-service)
+│   ├── docker-compose.yml          # Local dev: Postgres, Redis, Kafka, Backend
+│   ├── helm/
+│   │   ├── envoy-backend/          # Backend Helm chart (deployment, ingress, ESO, monitoring)
+│   │   └── warpstream-infra/       # WarpStream agent Helm chart
+│   ├── nginx.conf                  # NGINX API Gateway (rate limiting + routing)
+│   └── terraform/
+│       └── prod/                   # AWS IaC: VPC, EKS, ECR, ElastiCache, IAM OIDC, IRSA
+├── docs/                           # Architecture & design documentation
 ├── engine/
 │   └── notification/
-│       ├── core/               # Engine core (ingest, process, strategy)
-│       │   ├── engine.go       # Main engine: Ingest, Process, ingestSystem, ingestNormal
-│       │   ├── strategy.go     # Strategy pattern: normalStrategy, systemStrategy, ingestContext
-│       │   ├── repository.go   # Repository + Producer + Renderer interfaces
-│       │   └── types.go        # All DTOs and structs
-│       ├── models/             # Kafka event models and trigger payloads
-│       ├── provider/           # Provider interface + mock
-│       ├── queue/              # Kafka producer + consumer + topic definitions
-│       ├── scheduler/          # Background scheduler for future-dated notifications
+│       ├── core/                   # Engine core (ingest, process, strategy)
+│       │   ├── engine.go           # Ingest, Process, ingestSystem, ingestNormal
+│       │   ├── strategy.go         # Strategy pattern: normalStrategy, systemStrategy
+│       │   ├── repository.go       # Repository + Producer + Renderer interfaces
+│       │   └── types.go            # All DTOs and structs
+│       ├── models/                 # Kafka event models and trigger payloads
+│       ├── provider/               # Provider interface + mock
+│       ├── queue/                  # Kafka producer + consumer + topic definitions
+│       ├── scheduler/              # Background scheduler for future-dated notifications
 │       ├── sender/
-│       │   ├── email/          # SendGrid + SES providers
-│       │   └── sms/            # Twilio provider
-│       └── template/           # Go template renderer
+│       │   ├── email/              # SendGrid + SES providers
+│       │   └── sms/                # Twilio provider
+│       └── template/               # Go template renderer
 ├── internal/
-│   ├── app/                    # Fiber app setup, routing, consumer/scheduler bootstrap
-│   ├── billing/                # gRPC billing client (CheckLimit, RecordUsage)
-│   ├── domain/                 # Core domain models
-│   ├── handlers/               # HTTP + gRPC handlers
-│   ├── middleware/             # Auth, API Key, RBAC middleware
-│   ├── repositories/           # Repository implementations
-│   ├── services/               # Business logic layer
-│   ├── session/                # Redis session store
-│   └── utils/                  # UUID helpers, locals, etc.
+│   ├── app/                        # Fiber app setup, routing, consumer/scheduler bootstrap
+│   ├── billing/                    # gRPC billing client (CheckLimit, RecordUsage)
+│   ├── domain/                     # Core domain models
+│   ├── handlers/                   # HTTP + gRPC handlers
+│   ├── middleware/                  # Auth, API Key, RBAC middleware
+│   ├── repositories/               # Repository implementations
+│   ├── services/                   # Business logic layer
+│   ├── session/                    # Redis session store
+│   └── utils/                      # UUID helpers, locals, etc.
+├── k6/                             # Load testing scripts
+├── k8s-compiled/                   # Pre-rendered Kubernetes manifests
+├── logs/                           # Runtime log output
 ├── pkg/
-│   ├── cache/                  # Redis client
-│   ├── conversion/             # pgtype/JSON helpers
-│   ├── encryptor/              # AES credential encryption
-│   ├── httpclient/             # Shared HTTP client
-│   ├── logger/                 # zerolog + lumberjack
-│   ├── response/               # HTTP response helpers
-│   └── validator/              # Request validation
-└── proto/                      # Protobuf definitions + generated gRPC code
+│   ├── cache/                      # Redis client
+│   ├── conversion/                 # pgtype/JSON helpers
+│   ├── encryptor/                  # AES-256 credential encryption
+│   ├── httpclient/                 # Shared HTTP client
+│   ├── logger/                     # zerolog + lumberjack
+│   ├── response/                   # HTTP response helpers
+│   └── validator/                  # Request validation
+├── proto/                          # Protobuf definitions + generated gRPC stubs
+├── sdk/                            # Go client SDK for external consumers
+├── .env.example                    # Environment variable template
+├── alloy-config.alloy              # Grafana Alloy pipeline config
+├── alloy-values.yaml               # Alloy Helm values
+├── deploy-infra.ps1                # Local infra bootstrap script
+├── Dockerfile                      # Production multi-stage Docker image
+├── go.mod / go.sum                 # Go module dependencies
+├── prometheus.yml                  # Prometheus scrape configuration
+├── skaffold.yaml                   # Skaffold dev workflow
+└── Taskfile.yml                    # Task runner (start, migrate, gen, tf, k8s)
 ```
 
 ---
@@ -104,7 +135,7 @@ notification-engine/
 
 ### Prerequisites
 
-- **Go** 1.21+
+- **Go** 1.25.1+
 - **Docker & Docker Compose**
 - **`sqlc`** — `go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`
 - **`golang-migrate`** — `go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest`
@@ -170,6 +201,19 @@ This will:
 | `task migrate-create -- <name>` | Create a new migration |
 | `task gen-sqlc` | Regenerate sqlc models |
 | `task gen-proto` | Regenerate gRPC proto files |
+| `task mock` | Regenerate mockery mocks |
+| `task build-image` | Build production Docker image |
+| `task tf-init` | Initialize Terraform |
+| `task tf-plan` | Preview infrastructure changes |
+| `task tf-apply` | Apply infrastructure changes |
+| `task tf-destroy` | Destroy Terraform-managed resources |
+| `task tf-validate` | Validate Terraform configuration |
+| `task tf-fmt` | Format Terraform files |
+| `task k8s-deploy` | Deploy K8s manifests |
+| `task k8s-delete` | Remove K8s manifests |
+| `task k8s-status` | Check pod/service/ingress status |
+| `task k8s-logs-backend` | Tail envoy-backend pod logs |
+| `task k8s-logs-billing` | Tail billing-service pod logs |
 
 ---
 
@@ -198,6 +242,42 @@ Billing Service (cron/usage threshold)
     → Publish to Kafka (email topic)
     → Engine.Process() → Provider.Send()
 ```
+
+---
+
+## 🌐 GitOps & EKS Deployment
+
+The production environment is deployed on an Amazon EKS cluster (`envoy-cluster`, K8s 1.35) using a **GitOps** pipeline powered by **Argo CD** (App of Apps pattern) and **GitHub Actions** with keyless OIDC authentication.
+
+### Infrastructure as Code (Terraform)
+
+All AWS infrastructure is defined in `deployments/terraform/prod/`:
+
+| Resource | File | Description |
+|----------|------|-------------|
+| **VPC** | `vpc.tf` | 3-tier VPC (public/private/intra subnets), NAT gateway, DNS |
+| **EKS Cluster** | `eks.tf` | `envoy-cluster`, managed node groups (t3.small, 1-3 nodes), K8s 1.35 |
+| **ECR Repositories** | `ecr.tf` | `envoy-backend` and `billing-service` image repos with scan-on-push |
+| **ElastiCache** | `elasticache.tf` | Redis 7.1 cluster (`cache.m7g.large`), subnet group, security group |
+| **GitHub OIDC Provider** | `irsa-github.tf` | `aws_iam_openid_connect_provider.github` for keyless GitHub Actions auth |
+| **Deployer Roles** | `irsa-github.tf` | `github-actions-deploy-role` and `github-actions-billing-deploy-role` scoped by repo |
+| **External Secrets Operator** | `irsa-eso.tf` | IRSA role for ESO to read Secrets Manager via `KubernetesSecretsReaderPolicy` |
+| **WarpStream IRSA** | `irsa-warpstream.tf` | IRSA role + S3 access policy + Secrets Manager policy for WarpStream agents |
+
+### CI/CD Pipeline (GitHub Actions)
+
+On pushes to `main`, `.github/workflows/deploy.yml`:
+1. Runs Go unit tests.
+2. Assumes the AWS IAM Deployer role via keyless OIDC (no static secrets).
+3. Builds and pushes the Docker image to Amazon ECR.
+4. Overrides the image tag via git writeback to `deployments/helm/envoy-backend/values-production.yaml`.
+
+### GitOps Sync (Argo CD)
+
+- **App of Apps Pattern:** The cluster is bootstrapped with a root app (`deployments/argocd/root-app.yaml`) that monitors `deployments/argocd/apps/`.
+- **Child Apps:** Automatically deploys and synchronizes:
+  - `envoy-backend-app` (`deployments/helm/envoy-backend/` with `values-production.yaml`)
+  - `billing-service-app` (billing service Helm chart)
 
 ---
 
