@@ -1,7 +1,7 @@
 replicaCount: 1
 image:
   repository: 711396988882.dkr.ecr.ap-south-1.amazonaws.com/envoy-backend
-  tag: "74df02845c50cde16a0d5d809a0bbcb6230dc6fa"
+  tag: "2b54f8421f2f3a7dad69d715b8e39b3ea2fe0f40"
   pullPolicy: Always
 env:
   REDIS_ADDR: "notification-engine-redis.e1eboh.0001.aps1.cache.amazonaws.com:6379"
