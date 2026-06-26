@@ -110,4 +110,11 @@ if (Test-Path "c:\billing-service") {
     Write-Warning "Could not find c:\billing-service. Skipping billing-service deployment."
 }
 
-Write-Host "`n=== All deployments triggered! check status using: kubectl get pods -A ===" -ForegroundColor Green
+# 7. Bootstrap GitOps Application Management via Argo CD
+Write-Host "`n[6/5] Bootstrapping GitOps via Argo CD..." -ForegroundColor Yellow
+Write-Host "-> Applying Argo CD App-of-Apps master manifest..." -ForegroundColor Gray
+kubectl apply -f deployments/argocd/root-app.yaml
+
+Write-Host "`n=== All deployments triggered & GitOps bootstrapped! ===" -ForegroundColor Green
+Write-Host "Check status using: kubectl get pods -A" -ForegroundColor Green
+Write-Host "Check Argo CD status using: kubectl get applications -n argocd" -ForegroundColor Green
